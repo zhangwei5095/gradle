@@ -28,6 +28,7 @@ import org.gradle.execution.Dag
 import org.gradle.initialization.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.gradle.api.Project
 
 /**
  * @author Hans Dockter
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory
 class Build {
     private static Logger logger = LoggerFactory.getLogger(Build)
 
+    SettingsFileHandler settingsFileHandler
     SettingsProcessor settingsProcessor
     ProjectsLoader projectLoader
     BuildConfigurer buildConfigurer
@@ -43,9 +45,10 @@ class Build {
 
     Build() {}
 
-    Build(File gradleUserHomeDir, SettingsProcessor settingsProcessor, ProjectsLoader projectLoader, BuildConfigurer buildConfigurer,
-          BuildExecuter buildExecuter) {
+    Build(File gradleUserHomeDir, SettingsFileHandler settingsFileHandler, SettingsProcessor settingsProcessor,
+          ProjectsLoader projectLoader, BuildConfigurer buildConfigurer, BuildExecuter buildExecuter) {
         this.gradleUserHomeDir = gradleUserHomeDir
+        this.settingsFileHandler = settingsFileHandler
         this.settingsProcessor = settingsProcessor
         this.projectLoader = projectLoader
         this.buildConfigurer = buildConfigurer
@@ -94,19 +97,38 @@ class Build {
     }
 
     private DefaultSettings init(File currentDir, boolean searchUpwards, Map projectProperties, Map systemProperties) {
-        setSystemProperties(systemProperties)
-        DefaultSettings settings = settingsProcessor.process(currentDir, searchUpwards)
+        settingsFileHandler.find(currentDir, searchUpwards)
+        setSystemProperties(systemProperties, settingsFileHandler)
+        DefaultSettings settings = settingsProcessor.process(settingsFileHandler)
         settings
     }
 
     private DefaultSettings init(File currentDir, Map projectProperties, Map systemProperties) {
-        setSystemProperties(systemProperties)
-        DefaultSettings settings = settingsProcessor.createBasicSettings(currentDir)
+        settingsFileHandler.find(currentDir, false)
+        setSystemProperties(systemProperties, settingsFileHandler)
+        DefaultSettings settings = settingsProcessor.createBasicSettings(settingsFileHandler)
         settings
     }
 
-    private void setSystemProperties(Map properties) {
+    private void setSystemProperties(Map properties, SettingsFileHandler settingsFileHandler) {
         System.properties.putAll(properties)
+        addSystemPropertiesFromGradleProperties(settingsFileHandler)
+    }
+
+    private void addSystemPropertiesFromGradleProperties(SettingsFileHandler settingsFileHandler) {
+        Closure addSystemProps = { String key, value ->
+            if (key.startsWith(Project.SYSTEM_PROP_PREFIX + '.')) {
+                System.properties[key.substring((Project.SYSTEM_PROP_PREFIX + '.').length())] = value
+            }
+        }
+        [new File(settingsFileHandler.rootDir, Project.GRADLE_PROPERTIES),
+                new File(gradleUserHomeDir, Project.GRADLE_PROPERTIES)].each { File propertyFile ->
+            if (propertyFile.isFile()) {
+                Properties gradleProperties = new Properties()
+                gradleProperties.load(new FileInputStream(propertyFile))
+                gradleProperties.each(addSystemProps)
+            }
+        }
     }
 
     private Map getAllSystemProperties() {
@@ -120,8 +142,7 @@ class Build {
     static Closure newInstanceFactory(File gradleUserHomeDir, File pluginProperties, File defaultImportsFile) {
         {BuildScriptFinder buildScriptFinder, File buildResolverDir ->
             DefaultDependencyManagerFactory dependencyManagerFactory = new DefaultDependencyManagerFactory()
-            new Build(gradleUserHomeDir, new SettingsProcessor(
-                    new SettingsFileHandler(),
+            new Build(gradleUserHomeDir, new SettingsFileHandler(), new SettingsProcessor(
                     new ImportsReader(defaultImportsFile),
                     new SettingsFactory(),
                     dependencyManagerFactory,
