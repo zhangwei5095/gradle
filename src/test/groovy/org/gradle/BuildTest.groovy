@@ -28,15 +28,15 @@ import org.gradle.initialization.ProjectsLoader
 import org.gradle.initialization.SettingsProcessor
 import org.gradle.util.HelperUtil
 import org.gradle.api.Project
-import org.gradle.initialization.SettingsFileHandler
+import org.gradle.initialization.RootFinder
+import org.gradle.initialization.RootFinder
 
 /**
  * @author Hans Dockter
  */
 class BuildTest extends GroovyTestCase {
     StubFor projectLoaderMocker
-    MockFor configFilesHandlerMocker
-    SettingsFileHandler dummyConfigFilesHandler
+    RootFinder dummyRootFinder
     MockFor settingsProcessorMocker
     MockFor buildConfigurerMocker
     File expectedCurrentDir
@@ -58,7 +58,7 @@ class BuildTest extends GroovyTestCase {
 
     void setUp() {
         HelperUtil.deleteTestDir()
-        dummyConfigFilesHandler = [find: { File currentDir, boolean searchUpwards -> expectedSettings }] as SettingsFileHandler
+        dummyRootFinder = [find: { File currentDir, boolean searchUpwards -> expectedSettings }] as RootFinder
         expectedTaskNames = ['a', 'b']
         settingsProcessorMocker = new MockFor(SettingsProcessor)
         projectLoaderMocker = new StubFor(ProjectsLoader)
@@ -72,8 +72,8 @@ class BuildTest extends GroovyTestCase {
         expectedCurrentDir = new File('currentDir')
         expectedGradleUserHomeDir = new File(HelperUtil.TMP_DIR_FOR_TEST, 'gradleUserHomeDir')
         expectedSettings = [:] as DefaultSettings
-        settingsProcessorMocker.demand.process(1..1) {SettingsFileHandler configFilesHandler ->
-            assert configFilesHandler.is(dummyConfigFilesHandler) 
+        settingsProcessorMocker.demand.process(1..1) {RootFinder rootFinder ->
+            assert rootFinder.is(dummyRootFinder)
             expectedSettings
         }
         expectedRootProject = [:] as DefaultProject
@@ -89,12 +89,12 @@ class BuildTest extends GroovyTestCase {
         projectLoaderMocker.demand.getRootProject(0..10) {expectedRootProject}
         projectLoaderMocker.demand.getCurrentProject(0..10) {expectedCurrentProject}
         testBuildFactory = {
-            new Build(expectedGradleUserHomeDir, dummyConfigFilesHandler, new SettingsProcessor(), new ProjectsLoader(),
+            new Build(expectedGradleUserHomeDir, dummyRootFinder, new SettingsProcessor(), new ProjectsLoader(),
                     new BuildConfigurer(), new BuildExecuter())
         }
         createGradlePropertyFiles()
-        dummyConfigFilesHandler.rootDir = expectedSettings.rootDir
-        dummyConfigFilesHandler.currentDir = expectedCurrentDir
+        dummyRootFinder.rootDir = expectedSettings.rootDir
+        dummyRootFinder.currentDir = expectedCurrentDir
     }
 
     void tearDown() {
@@ -124,8 +124,8 @@ class BuildTest extends GroovyTestCase {
 
     void testRunWithEmbeddedScript() {
         settingsProcessorMocker = new MockFor(SettingsProcessor)
-        settingsProcessorMocker.demand.createBasicSettings(1..1) {SettingsFileHandler configFilesHandler ->
-            assert configFilesHandler.is(dummyConfigFilesHandler) 
+        settingsProcessorMocker.demand.createBasicSettings(1..1) {RootFinder rootFinder ->
+            assert rootFinder.is(dummyRootFinder)
             expectedSettings
         }
         checkRun {
@@ -235,8 +235,8 @@ class BuildTest extends GroovyTestCase {
 
     void testTaskListEmbedded() {
         settingsProcessorMocker = new MockFor(SettingsProcessor)
-        settingsProcessorMocker.demand.createBasicSettings(1..1) {SettingsFileHandler configFilesHandler ->
-            assert configFilesHandler.is(dummyConfigFilesHandler)
+        settingsProcessorMocker.demand.createBasicSettings(1..1) {RootFinder rootFinder ->
+            assert rootFinder.is(dummyRootFinder)
             expectedSettings
         }
         checkTask {

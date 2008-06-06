@@ -36,7 +36,7 @@ import org.gradle.api.Project
 class Build {
     private static Logger logger = LoggerFactory.getLogger(Build)
 
-    SettingsFileHandler settingsFileHandler
+    RootFinder rootFinder
     SettingsProcessor settingsProcessor
     ProjectsLoader projectLoader
     BuildConfigurer buildConfigurer
@@ -45,10 +45,10 @@ class Build {
 
     Build() {}
 
-    Build(File gradleUserHomeDir, SettingsFileHandler settingsFileHandler, SettingsProcessor settingsProcessor,
+    Build(File gradleUserHomeDir, RootFinder rootFinder, SettingsProcessor settingsProcessor,
           ProjectsLoader projectLoader, BuildConfigurer buildConfigurer, BuildExecuter buildExecuter) {
         this.gradleUserHomeDir = gradleUserHomeDir
-        this.settingsFileHandler = settingsFileHandler
+        this.rootFinder = rootFinder
         this.settingsProcessor = settingsProcessor
         this.projectLoader = projectLoader
         this.buildConfigurer = buildConfigurer
@@ -97,31 +97,31 @@ class Build {
     }
 
     private DefaultSettings init(File currentDir, boolean searchUpwards, Map projectProperties, Map systemProperties) {
-        settingsFileHandler.find(currentDir, searchUpwards)
-        setSystemProperties(systemProperties, settingsFileHandler)
-        DefaultSettings settings = settingsProcessor.process(settingsFileHandler)
+        rootFinder.find(currentDir, searchUpwards)
+        setSystemProperties(systemProperties, rootFinder)
+        DefaultSettings settings = settingsProcessor.process(rootFinder)
         settings
     }
 
     private DefaultSettings init(File currentDir, Map projectProperties, Map systemProperties) {
-        settingsFileHandler.find(currentDir, false)
-        setSystemProperties(systemProperties, settingsFileHandler)
-        DefaultSettings settings = settingsProcessor.createBasicSettings(settingsFileHandler)
+        rootFinder.find(currentDir, false)
+        setSystemProperties(systemProperties, rootFinder)
+        DefaultSettings settings = settingsProcessor.createBasicSettings(rootFinder)
         settings
     }
 
-    private void setSystemProperties(Map properties, SettingsFileHandler settingsFileHandler) {
+    private void setSystemProperties(Map properties, RootFinder rootFinder) {
         System.properties.putAll(properties)
-        addSystemPropertiesFromGradleProperties(settingsFileHandler)
+        addSystemPropertiesFromGradleProperties(rootFinder)
     }
 
-    private void addSystemPropertiesFromGradleProperties(SettingsFileHandler settingsFileHandler) {
+    private void addSystemPropertiesFromGradleProperties(RootFinder rootFinder) {
         Closure addSystemProps = { String key, value ->
             if (key.startsWith(Project.SYSTEM_PROP_PREFIX + '.')) {
                 System.properties[key.substring((Project.SYSTEM_PROP_PREFIX + '.').length())] = value
             }
         }
-        [new File(settingsFileHandler.rootDir, Project.GRADLE_PROPERTIES),
+        [new File(rootFinder.rootDir, Project.GRADLE_PROPERTIES),
                 new File(gradleUserHomeDir, Project.GRADLE_PROPERTIES)].each { File propertyFile ->
             if (propertyFile.isFile()) {
                 Properties gradleProperties = new Properties()
@@ -142,7 +142,7 @@ class Build {
     static Closure newInstanceFactory(File gradleUserHomeDir, File pluginProperties, File defaultImportsFile) {
         {BuildScriptFinder buildScriptFinder, File buildResolverDir ->
             DefaultDependencyManagerFactory dependencyManagerFactory = new DefaultDependencyManagerFactory()
-            new Build(gradleUserHomeDir, new SettingsFileHandler(), new SettingsProcessor(
+            new Build(gradleUserHomeDir, new RootFinder(), new SettingsProcessor(
                     new ImportsReader(defaultImportsFile),
                     new SettingsFactory(),
                     dependencyManagerFactory,
