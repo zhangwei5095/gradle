@@ -22,8 +22,8 @@ import org.slf4j.LoggerFactory
 /**
  * @author Hans Dockter
  */
-class Tutorial {
-    private static Logger logger = LoggerFactory.getLogger(Tutorial)
+class Userguide {
+    private static Logger logger = LoggerFactory.getLogger(Userguide)
     static String NL = System.properties['line.separator']
 
     static void execute(String gradleHome, String samplesDirName, String userguideOutputDir) {

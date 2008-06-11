@@ -27,7 +27,7 @@ class IntegTestSuite {
         WaterProject.execute(distDirPath, samplesDirPath)
         PropertiesTest.execute(distDirPath, samplesDirPath, userguideOutputDir)
         org.gradle.build.integtests.Version.execute(distDirPath)
-        Tutorial.execute(distDirPath, samplesDirPath, userguideOutputDir)
+        Userguide.execute(distDirPath, samplesDirPath, userguideOutputDir)
         MavenRepo.execute(distDirPath, samplesDirPath)
     }
 }
