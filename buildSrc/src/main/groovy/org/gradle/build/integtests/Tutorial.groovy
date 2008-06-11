@@ -37,9 +37,9 @@ class Userguide {
                 result = Executer.execute(gradleHome, new File(userguideDir, run.subDir).absolutePath, [run.execute], run.envs, run.file,
                         run.debugLevel)
             }
-            println new File(userguideOutputDir, run.id + '.out').text
             result.output = ">$result.command$NL" + result.output
-            println result.output
+//            println new File(userguideOutputDir, run.id + '.out').text
+//            println result.output
             assert result.output == new File(userguideOutputDir, run.id + '.out').text
         }
     }
