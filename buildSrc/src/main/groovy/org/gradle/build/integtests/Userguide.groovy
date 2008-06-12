@@ -18,6 +18,7 @@ package org.gradle.build.integtests
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import groovy.io.PlatformLineWriter
 
 /**
  * @author Hans Dockter
@@ -38,18 +39,46 @@ class Userguide {
                         run.debugLevel)
             }
             result.output = ">$result.unixCommand$NL" + result.output
-            String expectedResult = new File(userguideOutputDir, run.id + '.out').text
-//            println result.output
+            String expectedResult = replaceWithPlatformNewLines(new File(userguideOutputDir, run.id + '.out').text)
             try {
-                assert result.output == new File(userguideOutputDir, run.id + '.out').text
+                assert result.output == expectedResult
             } catch (AssertionError e) {
                 println 'Expected Result:'
                 println expectedResult
                 println 'Actual Result:'
                 println result.output
+                checkDifference(expectedResult, result.output)
                 throw e
             }
         }
+    }
+
+    static String replaceWithPlatformNewLines(String text) {
+        StringWriter stringWriter = new StringWriter()
+        new PlatformLineWriter(stringWriter).withWriter { it.write(text) }
+        stringWriter.toString()
+    }
+
+    static void checkDifference(String expected, String actual) {
+        String source = expected.length() > actual.length() ? expected : actual
+        source.eachWithIndex {c, index ->
+            boolean expectedOutOfRange = false
+            boolean actualOutOfRange = false
+            boolean difference = false
+            if (index >= expected.length()) {
+                expectedOutOfRange = true
+            } else if (index >= actual.length()) {
+                actualOutOfRange = true
+            } else if (expected[index] != actual[index]) {
+                difference = true
+            }
+            if (expectedOutOfRange || actualOutOfRange || difference) {
+                println "Difference in position $index:"
+                println("Expected: " + (expectedOutOfRange ? 'Out of range' : "${(char) expected[index]} ${(int) expected[index]}"))
+                println("Actual: " + (expectedOutOfRange ? 'Out of range' : "${(char) actual[index]} ${(int) actual[index]}"))
+            }
+        }
+
     }
 
     static void main(String[] args) {
