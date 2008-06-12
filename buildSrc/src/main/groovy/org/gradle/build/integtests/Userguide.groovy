@@ -116,7 +116,6 @@ class Userguide {
                 run('tutorial', 'autoskipDepends', '-Dskip.autoskip depends'),
                 run('tutorial', 'configByDag', 'release'),
                 run('tutorial', 'count', 'count'),
-                run('tutorial', 'date', 'date'),
                 run('tutorial', 'directoryTask', 'otherResources'),
                 run('tutorial', 'disableTask', 'disableMe'),
                 run('tutorial', 'dynamic', 'task_1'),
@@ -134,7 +133,8 @@ class Userguide {
                 run('tutorial', 'projectApi', 'check'),
                 run('tutorial', 'replaceTask', 'resources'),
                 run('tutorial', 'skipProperties', '-DmySkipProperty skipMe'),
-                run('tutorial', 'stopExecutionException', 'myTask')
+                run('tutorial', 'stopExecutionException', 'myTask'),
+                run('tutorial', 'upper', 'upper')
 
         ]
     }
