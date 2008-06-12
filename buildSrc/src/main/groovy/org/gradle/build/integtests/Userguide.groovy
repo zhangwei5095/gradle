@@ -127,7 +127,7 @@ class Userguide {
         PrintWriter printWriter = new PrintWriter(stringWriter)
         logger.info("Evaluating Groovy script: $script.absolutePath")
         new GroovyShell(new Binding(out: printWriter)).evaluate(script)
-        [output: stringWriter, command: "groovy $script.name"]
+        [output: stringWriter, command: "groovy $script.name", unixCommand: "groovy $script.name", windowsCommand: "groovy $script.name"]
     }
 
 }

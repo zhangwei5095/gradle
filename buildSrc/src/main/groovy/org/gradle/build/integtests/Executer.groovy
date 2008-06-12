@@ -71,8 +71,6 @@ class Executer {
             println "Execute in $currentDirName with: $actualCommand"
             additionalEnvs << unixPath()
             proc = actualCommand.execute(envs + additionalEnvs, new File(currentDirName))
-            // strip path
-            actualCommand = actualCommand.replaceFirst(unixCommandSnippet, windowsCommandSnippet)
         }
         proc.consumeProcessOutput(outStream, errStream)
         proc.waitForOrKill(runBeforeKill)
@@ -82,7 +80,12 @@ class Executer {
         if (exitValue) {
             throw new RuntimeException("Integrationtests failed with: $output $error")
         }
+        unixCommand = stripGradlePath(unixCommand, unixCommandSnippet)
         return [output: output, command: actualCommand, unixCommand: unixCommand, windowsCommand: windowsCommand]
+    }
+
+    static String stripGradlePath(String unixCommand, String gradleWithPath) {
+        unixCommand.replaceFirst(gradleWithPath, 'gradle')   
     }
 
     static String outputOption(int outputType) {
