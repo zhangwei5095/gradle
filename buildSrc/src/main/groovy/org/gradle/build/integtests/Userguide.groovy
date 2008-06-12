@@ -38,9 +38,17 @@ class Userguide {
                         run.debugLevel)
             }
             result.output = ">$result.command$NL" + result.output
-//            println new File(userguideOutputDir, run.id + '.out').text
+            String expectedResult = new File(userguideOutputDir, run.id + '.out').text
 //            println result.output
-            assert result.output == new File(userguideOutputDir, run.id + '.out').text
+            try {
+                assert result.output == new File(userguideOutputDir, run.id + '.out').text
+            } catch (AssertionError e) {
+                println 'Expected Result:'
+                println expectedResult
+                println 'Actual Result:'
+                println result.output
+                throw e
+            }
         }
     }
 
@@ -51,7 +59,7 @@ class Userguide {
     static List getScripts() {
         [
                 new GradleRun(subDir: 'properties', id: 'properties', debugLevel: Executer.QUIET, envs: ['ORG_GRADLE_PROJECT_envProjectProp=envPropertyValue'],
-                    execute: '-PcommandLineProjectProp=commandLineProjectPropValue -Dorg.gradle.project.systemProjectProp=systemPropertyValue printProps'),
+                        execute: '-PcommandLineProjectProp=commandLineProjectPropValue -Dorg.gradle.project.systemProjectProp=systemPropertyValue printProps'),
                 new GradleRun(subDir: 'tutorial', id: 'scope', file: 'scope.groovy', groovyScript: true),
                 runMp('firstExample/water', 'FirstExample', 'hello'),
                 runMp('addKrill/water', 'AddKrill', 'hello'),
