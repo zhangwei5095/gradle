@@ -181,7 +181,7 @@ The \emph{Bundle} task has two instances, \texttt{libs} and \texttt{dists}. The 
 \subsection{The libs Task} % (fold)
 \label{sub:the_libs_task}
 The \texttt{libs} task contains all the archive tasks which constitute the libraries needed to use your project as a library. Executing the libs task leads to the execution of all the contained archive tasks. In a multi-project build the archives which are produced by the \texttt{libs} task are available in the classpath of a dependent project. If you upload your project into a repository, those archives are part of the dependency descriptor. If you come from Maven you can have only one library jar per project. With Ivy you can have as many as you want. 
-The Java plugin adds by default one jar archive to the \texttt{libs} task. This jar contains the content of the \texttt{classesDir}. This is the behavior your are used from Maven. If you are happy with that you usually don't have to touch this task. Except if you want to change the names of the generated archives. 
+The Java plugin adds by default one jar archive to the \texttt{libs} task. The task name is by default \texttt{projectName\_jar} and can of course be manipulated by this name. This jar contains the content of the \texttt{classesDir}. This is the behavior your are used from Maven. If you are happy with that you usually don't have to touch this task. Except if you want to change the names of the generated archives. 
 
 The \texttt{libs} task depends on the \texttt{test} task and its archive tasks. The archive tasks assigned to the \texttt{libs} task depend by default on the \texttt{test} task as well. You can change this via the \texttt{childrenDependsOn} property of the \texttt{libs} task. 
 % subsection the_libs_task (end)
@@ -222,8 +222,8 @@ An archive task is a task which produces an archive at execution time. The follo
 		Type & Accepted file container & Extends \\ \hline
 		\href{\API tasks/bundling/Zip.html}{org.gradle.api.tasks.bundling.Zip} & fileSet, fileCollection, zipFileSet & AbstractArchiveTask \\ \hline
 		\href{\API tasks/bundling/Tar.html}{org.gradle.api.tasks.bundling.Tar} & fileSet, fileCollection, zipFileSet, tarFileSet & Zip \\ \hline
-		\href{\API tasks/bundling/Jar.html}{org.gradle.api.tasks.bundling.Jar} & fileSet, fileCollection & Zip \\ \hline
-		\href{\API tasks/bundling/War.html}{org.gradle.api.tasks.bundling.War} & fileSet, fileCollection & Jar \\ \hline		
+		\href{\API tasks/bundling/Jar.html}{org.gradle.api.tasks.bundling.Jar} & fileSet, fileCollection, zipFileSet & Zip \\ \hline
+		\href{\API tasks/bundling/War.html}{org.gradle.api.tasks.bundling.War} & fileSet, fileCollection, zipFileSet & Jar \\ \hline		
 	\end{tabular}
 \end{center}
 The following file containers are available:
