@@ -36,13 +36,16 @@ public class AbstractIntegrationTest {
 
     @Before
     public void setupTestDir() throws IOException {
-        testDir = HelperUtil.makeNewTestDir();
+        testDir = HelperUtil.makeNewTestDir().getCanonicalFile();
         defaultImportFile = new File(testDir, "default-imports");
         FileUtils.writeStringToFile(defaultImportFile, "import org.gradle.api.*");
     }
 
+    public File getTestDir() {
+        return testDir;
+    }
+
     protected File getTestBuildFile(String name) {
-        System.out.println("name = " + name);
         URL resource = getClass().getResource("testProjects/" + name);
         assertThat(resource, notNullValue());
         assertThat(resource.getProtocol(), equalTo("file"));
