@@ -19,6 +19,16 @@ import org.gradle.api.Project;
 import org.gradle.api.dependencies.ProjectDependency;
 import org.apache.commons.io.FilenameUtils;
 
+import org.dom4j.Document;
+import org.dom4j.DocumentFactory;
+import org.dom4j.Element;
+import org.dom4j.io.OutputFormat;
+import org.dom4j.io.XMLWriter;
+import org.dom4j.io.SAXReader;
+import org.dom4j.tree.DefaultText;
+import org.dom4j.Attribute;
+import org.dom4j.tree.DefaultAttribute;
+
 import java.util.*;
 
 /**
@@ -44,5 +54,19 @@ class EclipseUtil {
 
     static String relativePath(Project project, Object path) {
         return FilenameUtils.separatorsToUnix(project.relativePath(path).toString());
+    }
+
+    static void addFacet(Document document, String facetType, Attribute... attributes) {
+        Element root;
+
+        if (document.getRootElement() == null || (root = ((Element) document.selectSingleNode("//faceted-project"))) == null) {
+            root = document.addElement("faceted-project");
+        }
+
+        Element facet = root.addElement(facetType);
+
+        for (Attribute attribute : attributes) {
+            facet.add(attribute);
+        }
     }
 }

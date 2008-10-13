@@ -34,6 +34,7 @@ import org.gradle.api.tasks.ide.eclipse.EclipseClasspath;
 import org.gradle.api.tasks.ide.eclipse.EclipseClean;
 import org.gradle.api.tasks.ide.eclipse.EclipseProject;
 import org.gradle.api.tasks.ide.eclipse.ProjectType;
+import org.gradle.api.tasks.ide.eclipse.EclipseWtpModule;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.api.tasks.testing.Test;
 import org.gradle.api.tasks.testing.ForkMode;
@@ -70,6 +71,7 @@ public class JavaPlugin implements Plugin {
     public static final String ECLIPSE_CLEAN = "eclipseClean";
     public static final String ECLIPSE_PROJECT = "eclipseProject";
     public static final String ECLIPSE_CP = "eclipseCp";
+    public static final String ECLIPSE_WTP_MODULE = "eclipseWtpModule";
 
     public void apply(Project project, PluginRegistry pluginRegistry) {
         apply(project, pluginRegistry, new HashMap());
@@ -115,7 +117,7 @@ public class JavaPlugin implements Plugin {
         distsUpload.getConfigurations().add(DISTS);
 
         configureEclipse(project);
-
+        configureEclipseWtpModule(project);
     }
 
     private void configureEclipse(Project project) {
@@ -131,6 +133,18 @@ public class JavaPlugin implements Plugin {
         eclipseProject.setProjectName(project.getName());
         eclipseProject.setProjectType(ProjectType.JAVA);
         return eclipseProject;
+    }
+
+    private void configureEclipseWtpModule(Project project) {
+        EclipseWtpModule eclipseWtpModule = (EclipseWtpModule) project.createTask(GUtil.map("type", EclipseWtpModule.class), ECLIPSE_WTP_MODULE);
+
+
+        eclipseWtpModule.conventionMapping(GUtil.map(
+                "srcDirs", new ConventionValue() {
+            public Object getValue(Convention convention, Task task) {
+                return GUtil.addLists(java(convention).getSrcDirs(), java(convention).getResourceDirs());
+            }
+        }));
     }
 
     private EclipseClasspath configureEclipseClasspath(Project project) {
