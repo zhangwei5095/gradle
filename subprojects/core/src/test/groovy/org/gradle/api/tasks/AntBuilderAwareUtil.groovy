@@ -34,7 +34,7 @@ class AntBuilderAwareUtil {
         assertSetContains(set, filenames, [FileCollection.AntType.ResourceCollection])
     }
 
-    static def assertSetContains(FileCollection set, Set<String> filenames, Iterable<FileCollection.AntType> types, boolean generic = true) {
+    static def assertSetContains(FileCollection set, Set<String> filenames, Iterable<?> types, boolean generic = true) {
         AntBuilder ant = new DefaultAntBuilder(null)
         ant.antProject.addTaskDefinition('test', FileListTask)
 
