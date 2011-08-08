@@ -29,7 +29,6 @@ public class GroovyCompileOptions extends AbstractOptions {
     String encoding = null
     boolean fork = true
     GroovyForkOptions forkOptions = new GroovyForkOptions()
-    GroovyJointCompilationOptions jointCompilationOptions = new GroovyJointCompilationOptions()
     @Input
     boolean includeJavaRuntime = false
     boolean stacktrace
@@ -52,6 +51,6 @@ public class GroovyCompileOptions extends AbstractOptions {
     }
 
     Map optionMap() {
-        super.optionMap() + forkOptions.optionMap() + jointCompilationOptions.optionMap()
+        super.optionMap() + forkOptions.optionMap()
     }
 }
