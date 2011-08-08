@@ -133,11 +133,15 @@ public class EarPlugin implements Plugin<ProjectInternal> {
     private void wireEarTaskConventions(Project project, final EarPluginConvention earConvention) {
         project.getTasks().withType(Ear.class, new Action<Ear>() {
             public void execute(Ear task) {
-                task.getConventionMapping().map("libDirName", new Callable<String>() {
-                    public String call() throws Exception { return earConvention.getLibDirName(); }
+                task.getConventionMapping().mapCallable("libDirName", new Callable<String>() {
+                    public String call() throws Exception {
+                        return earConvention.getLibDirName();
+                    }
                 });
-                task.getConventionMapping().map("deploymentDescriptor", new Callable<DeploymentDescriptor>() {
-                    public DeploymentDescriptor call() throws Exception { return earConvention.getDeploymentDescriptor(); }
+                task.getConventionMapping().mapCallable("deploymentDescriptor", new Callable<DeploymentDescriptor>() {
+                    public DeploymentDescriptor call() throws Exception {
+                        return earConvention.getDeploymentDescriptor();
+                    }
                 });
             }
         });

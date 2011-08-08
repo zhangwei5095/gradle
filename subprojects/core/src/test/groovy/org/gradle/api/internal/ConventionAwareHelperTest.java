@@ -86,7 +86,7 @@ public class ConventionAwareHelperTest {
             }
         };
 
-        conventionAware.map("list1", callable);
+        conventionAware.mapCallable("list1", callable);
         assertThat(conventionAware.getConventionValue("list1"), equalTo((Object) toList("a")));
     }
     

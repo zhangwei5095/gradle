@@ -66,7 +66,7 @@ public class ConventionAwareHelper implements ConventionMapping {
         });
     }
 
-    public MappedProperty map(String propertyName, final Callable<?> value) {
+    public MappedProperty mapCallable(String propertyName, final Callable<?> value) {
         return map(propertyName, new ConventionValue() {
             public Object getValue(Convention convention, IConventionAware conventionAwareObject) {
                 try {

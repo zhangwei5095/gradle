@@ -416,7 +416,7 @@ public abstract class AbstractClassGeneratorTest {
             throw new UnsupportedOperationException();
         }
 
-        public MappedProperty map(String propertyName, Callable<?> value) {
+        public MappedProperty mapCallable(String propertyName, Callable<?> value) {
             throw new UnsupportedOperationException();
         }
 

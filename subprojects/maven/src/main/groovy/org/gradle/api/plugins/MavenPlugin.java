@@ -69,16 +69,16 @@ public class MavenPlugin implements Plugin<ProjectInternal> {
 
     private void setConventionMapping(final Project project, final MavenPluginConvention pluginConvention) {
         ConventionMapping conventionMapping = ((IConventionAware) project.getRepositories()).getConventionMapping();
-        conventionMapping.map("mavenPomDir", new Callable<Object>() {
-                    public Object call() throws Exception {
-                        return pluginConvention.getPomDir();
-                    }
-                });
-        conventionMapping.map("mavenScopeMappings", new Callable<Object>() {
-                    public Object call() throws Exception {
-                        return pluginConvention.getConf2ScopeMappings();
-                    }
-                });
+        conventionMapping.mapCallable("mavenPomDir", new Callable<Object>() {
+            public Object call() throws Exception {
+                return pluginConvention.getPomDir();
+            }
+        });
+        conventionMapping.mapCallable("mavenScopeMappings", new Callable<Object>() {
+            public Object call() throws Exception {
+                return pluginConvention.getConf2ScopeMappings();
+            }
+        });
     }
 
     private MavenPluginConvention addConventionObject(ProjectInternal project) {
