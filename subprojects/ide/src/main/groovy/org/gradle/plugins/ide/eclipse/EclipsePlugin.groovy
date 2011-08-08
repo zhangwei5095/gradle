@@ -44,7 +44,7 @@ class EclipsePlugin extends IdePlugin {
     EclipseModel model = new EclipseModel()
 
     @Override protected String getLifecycleTaskName() {
-        return 'eclipse'
+        return ECLIPSE_TASK_NAME
     }
 
     @Override protected void onApply(Project project) {
