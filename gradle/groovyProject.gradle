@@ -33,4 +33,4 @@ task classpathManifest {
         manifestFile.withOutputStream { properties.save(it, 'classpath definitions') }
     }
 }
-sourceSets.main.output.dir generatedResourcesDir, buildBy: classpathManifest
+sourceSets.main.output.dir generatedResourcesDir //, buildBy: classpathManifest
