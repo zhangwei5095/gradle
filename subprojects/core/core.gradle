@@ -91,7 +91,3 @@ test {
 // needs to be excluded because Eclipse does not recognize the difference between test & prod dependency
 // this is not a best solution. I guess we should move the tests that depend on coreIml from the core subproject or fix eclipse :)
 eclipse.classpath.minusConfigurations += configurations.excludedInEclipse
-
-compileTestGroovy {
-    groovyOptions.fork = false
-}
