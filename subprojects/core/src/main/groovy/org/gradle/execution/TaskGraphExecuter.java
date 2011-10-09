@@ -15,20 +15,21 @@
  */
 package org.gradle.execution;
 
+import groovy.lang.Closure;
+import org.gradle.api.Action;
 import org.gradle.api.Task;
 import org.gradle.api.execution.TaskExecutionGraph;
 import org.gradle.api.specs.Spec;
 
 public interface TaskGraphExecuter extends TaskExecutionGraph {
     /**
-     * Sets the filter to use when adding tasks to this graph. Only those tasks which are accepted by the given filter
-     * will be added to this graph.
+     * Sets the filter to use when adding tasks to this graph. Only those tasks which are accepted by the given filter will be added to this graph.
      */
     void useFilter(Spec<? super Task> filter);
 
     /**
-     * Adds the given tasks and their dependencies to this graph. Tasks are executed in an arbitrary order. The tasks
-     * will be executed before any tasks from a subsequent call to this method are executed.
+     * Adds the given tasks and their dependencies to this graph. Tasks are executed in an arbitrary order. The tasks will be executed before any tasks from a subsequent call to this method are
+     * executed.
      */
     void addTasks(Iterable<? extends Task> tasks);
 
@@ -36,4 +37,14 @@ public interface TaskGraphExecuter extends TaskExecutionGraph {
      * Executes the tasks in this graph. Discards the contents of this graph when completed.
      */
     void execute(TaskFailureHandler handler);
+
+    /**
+     * Adds an action to be called when a node is added to this graph.
+     */
+    void whenTaskAdded(Action<? super TaskGraphNode> action);
+
+    /**
+     * Adds an action to be called when a node is added to this graph.
+     */
+    void whenTaskAdded(Closure action);
 }

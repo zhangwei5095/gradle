@@ -17,6 +17,7 @@
 package org.gradle.execution;
 
 import groovy.lang.Closure;
+import org.gradle.api.Action;
 import org.gradle.api.CircularReferenceException;
 import org.gradle.api.Task;
 import org.gradle.api.execution.TaskExecutionGraphListener;
@@ -25,11 +26,9 @@ import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.tasks.CachingTaskDependencyResolveContext;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
+import org.gradle.listener.ActionBroadcast;
 import org.gradle.listener.ListenerBroadcast;
 import org.gradle.listener.ListenerManager;
-import org.gradle.util.Clock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,10 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Hans Dockter
  */
 public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
-    private static Logger logger = LoggerFactory.getLogger(DefaultTaskGraphExecuter.class);
-
     private final ListenerBroadcast<TaskExecutionGraphListener> graphListeners;
     private final ListenerBroadcast<TaskExecutionListener> taskListeners;
+    private final ActionBroadcast<TaskGraphNode> nodeListeners;
     private final Map<Task, TaskInfo> executionPlan = new LinkedHashMap<Task, TaskInfo>();
     private boolean populated;
     private Spec<? super Task> filter = Specs.satisfyAll();
@@ -50,6 +48,7 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
     public DefaultTaskGraphExecuter(ListenerManager listenerManager) {
         graphListeners = listenerManager.createAnonymousBroadcaster(TaskExecutionGraphListener.class);
         taskListeners = listenerManager.createAnonymousBroadcaster(TaskExecutionListener.class);
+        nodeListeners = new ActionBroadcast<TaskGraphNode>();
     }
 
     public void useFilter(Spec<? super Task> filter) {
@@ -59,26 +58,19 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
     public void addTasks(Iterable<? extends Task> tasks) {
         assert tasks != null;
 
-        Clock clock = new Clock();
-
         Set<Task> sortedTasks = new TreeSet<Task>();
         for (Task task : tasks) {
             sortedTasks.add(task);
         }
         fillDag(sortedTasks);
         populated = true;
-
-        logger.debug("Timing: Creating the DAG took " + clock.getTime());
     }
 
     public void execute(TaskFailureHandler handler) {
-        Clock clock = new Clock();
-
         failureHandler = handler;
         graphListeners.getSource().graphPopulated(this);
         try {
             doExecute(executionPlan.values());
-            logger.debug("Timing: Executing the DAG took " + clock.getTime());
         } finally {
             executionPlan.clear();
             failureHandler = null;
@@ -107,14 +99,21 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
             if (visiting.add(task)) {
                 // Have not seen this task before - add its dependencies to the head of the queue and leave this
                 // task in the queue
-                Set<Task> dependsOnTasks = new TreeSet<Task>(Collections.reverseOrder());
-                dependsOnTasks.addAll(context.getDependencies(task));
-                for (Task dependsOnTask : dependsOnTasks) {
+                TaskGraphNodeImpl node = new TaskGraphNodeImpl(task);
+                nodeListeners.execute(node);
+                node.dependencies.addAll(context.getDependencies(task));
+                for (Task dependsOnTask : node.dependencies) {
                     if (visiting.contains(dependsOnTask)) {
                         throw new CircularReferenceException(String.format(
                                 "Circular dependency between tasks. Cycle includes [%s, %s].", task, dependsOnTask));
                     }
                     queue.add(0, dependsOnTask);
+                }
+                for (Task dependee : node.dependees) {
+                    if (!visiting.contains(dependee)) {
+                        queue.add(1, dependee);
+                    }
+                    // Else, the dependee already depends on this task, so skip
                 }
             } else {
                 // Have visited this task's dependencies - add it to the end of the plan
@@ -128,7 +127,8 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
                     }
                     // else - the dependency has been filtered, so ignore it
                 }
-                executionPlan.put(task, new TaskInfo((TaskInternal) task, dependencies));
+                TaskInfo node = new TaskInfo((TaskInternal) task, dependencies);
+                executionPlan.put(task, node);
             }
         }
     }
@@ -161,19 +161,27 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
         taskListeners.add("afterExecute", closure);
     }
 
+    public void whenTaskAdded(Action<? super TaskGraphNode> action) {
+        nodeListeners.add(action);
+    }
+
+    public void whenTaskAdded(Closure action) {
+        nodeListeners.add(action);
+    }
+
     private void doExecute(Iterable<? extends TaskInfo> tasks) {
         AtomicBoolean stop = new AtomicBoolean();
-        for (TaskInfo task : tasks) {
-            executeTask(task, stop);
+        for (TaskInfo node : tasks) {
+            executeTask(node, stop);
             if (stop.get()) {
                 break;
             }
         }
     }
 
-    private void executeTask(TaskInfo taskInfo, AtomicBoolean stop) {
-        TaskInternal task = taskInfo.task;
-        for (TaskInfo dependency : taskInfo.dependencies) {
+    private void executeTask(TaskInfo node, AtomicBoolean stop) {
+        TaskInternal task = node.task;
+        for (TaskInfo dependency : node.dependencies) {
             if (!dependency.executed) {
                 // Cannot execute this task, as some dependencies have not been executed
                 return;
@@ -189,7 +197,7 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
                     stop.set(true);
                 }
             } else {
-                taskInfo.executed = true;
+                node.executed = true;
             }
         } finally {
             taskListeners.getSource().afterExecute(task, task.getState());
@@ -229,9 +237,40 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
         private final Set<TaskInfo> dependencies;
         private boolean executed;
 
+        private TaskInfo(TaskInternal task) {
+            this.task = task;
+            this.dependencies = new HashSet<TaskInfo>();
+        }
+
         private TaskInfo(TaskInternal task, Set<TaskInfo> dependencies) {
             this.task = task;
             this.dependencies = dependencies;
+        }
+
+        public Task getTask() {
+            return task;
+        }
+    }
+
+    private static class TaskGraphNodeImpl implements TaskGraphNode {
+        private final Task task;
+        private final Set<Task> dependencies = new TreeSet<Task>(Collections.reverseOrder());
+        private final Set<Task> dependees = new TreeSet<Task>();
+
+        public TaskGraphNodeImpl(Task task) {
+            this.task = task;
+        }
+
+        public Task getTask() {
+            return task;
+        }
+
+        public void addDependency(Task task) {
+            dependencies.add(task);
+        }
+
+        public void addDependee(Task task) {
+            dependees.add(task);
         }
     }
 }

@@ -16,6 +16,7 @@
 
 package org.gradle.execution;
 
+import org.gradle.api.Action;
 import org.gradle.api.CircularReferenceException;
 import org.gradle.api.Task;
 import org.gradle.api.execution.TaskExecutionGraphListener;
@@ -34,6 +35,7 @@ import org.jmock.Expectations;
 import org.jmock.api.Invocation;
 import org.jmock.integration.junit4.JMock;
 import org.jmock.integration.junit4.JUnit4Mockery;
+import org.jmock.lib.action.CustomAction;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -464,6 +466,120 @@ public class DefaultTaskGraphExecuterTest {
         assertThat(executedTasks, equalTo(toList(a, c)));
     }
 
+    @Test
+    public void executesActionWhenTaskIsAddedToGraph() {
+        final Task a = task("a");
+        final Task b = task("b", a);
+        final Action<TaskGraphNode> action = context.mock(Action.class);
+
+        taskExecuter.whenTaskAdded(action);
+        
+        context.checking(new Expectations(){{
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    assertThat(node.getTask(), sameInstance(b));
+                }
+            }));
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    assertThat(node.getTask(), sameInstance(a));
+                }
+            }));
+        }});
+
+        taskExecuter.addTasks(toList(b));
+    }
+    
+    @Test
+    public void actionCanAddDependencyForTask() {
+        final Task a = task("a");
+        Task b = task("b");
+        final Action<TaskGraphNode> action = context.mock(Action.class);
+
+        taskExecuter.whenTaskAdded(action);
+        
+        context.checking(new Expectations(){{
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    node.addDependency(a);
+                }
+            }));
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+        }});
+
+        taskExecuter.addTasks(toList(b));
+        assertThat(taskExecuter.getAllTasks(), equalTo(toList(a, b)));
+    }
+
+    @Test
+    public void actionCanAddDependeeForTask() {
+        final Task a = task("a");
+        Task b = task("b");
+        final Action<TaskGraphNode> action = context.mock(Action.class);
+
+        taskExecuter.whenTaskAdded(action);
+
+        context.checking(new Expectations(){{
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    node.addDependee(a);
+                }
+            }));
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+        }});
+
+        taskExecuter.addTasks(toList(b));
+        assertThat(taskExecuter.getAllTasks(), equalTo(toList(b, a)));
+    }
+
+    @Test
+    public void actionCanAddDependeeWhichDependsOnCurrentTask() {
+        final Task a = task("a");
+        final Task b = task("b");
+        final Task c = task("c", a, b);
+        final Action<TaskGraphNode> action = context.mock(Action.class);
+
+        taskExecuter.whenTaskAdded(action);
+
+        context.checking(new Expectations(){{
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    assertThat(node.getTask(), sameInstance(c));
+                }
+            }));
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    assertThat(node.getTask(), sameInstance(a));
+                    node.addDependee(c);
+                }
+            }));
+            one(action).execute(with(notNullValue(TaskGraphNode.class)));
+            will(doAction(new Action<TaskGraphNode>() {
+                public void execute(TaskGraphNode node) {
+                    assertThat(node.getTask(), sameInstance(b));
+                }
+            }));
+        }});
+
+        taskExecuter.addTasks(toList(c));
+        assertThat(taskExecuter.getAllTasks(), equalTo(toList(a, b, c)));
+    }
+    
+    private org.jmock.api.Action doAction(final Action<TaskGraphNode> action) {
+        return new CustomAction("run action") {
+            public Object invoke(Invocation invocation) throws Throwable {
+                action.execute((TaskGraphNode) invocation.getParameter(0));
+                return null;
+            }
+        };
+    }
+    
     private void dependsOn(final Task task, final Task... dependsOn) {
         context.checking(new Expectations() {{
             TaskDependency taskDependency = context.mock(TaskDependency.class);
@@ -501,7 +617,7 @@ public class DefaultTaskGraphExecuterTest {
     }
     
     private TaskInternal createTask(final String name) {
-        final TaskInternal task = context.mock(TaskInternal.class);
+        final TaskInternal task = context.mock(TaskInternal.class, String.format("task %s", name));
         context.checking(new Expectations() {{
             TaskStateInternal state = context.mock(TaskStateInternal.class);
 
