@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author Hans Dockter
@@ -44,11 +45,7 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
     private final Map<Task, TaskInfo> executionPlan = new LinkedHashMap<Task, TaskInfo>();
     private boolean populated;
     private Spec<? super Task> filter = Specs.satisfyAll();
-    private TaskFailureHandler failureHandler = new TaskFailureHandler() {
-        public void onTaskFailure(Task task) {
-            task.getState().rethrowFailure();
-        }
-    };
+    private TaskFailureHandler failureHandler;
 
     public DefaultTaskGraphExecuter(ListenerManager listenerManager) {
         graphListeners = listenerManager.createAnonymousBroadcaster(TaskExecutionGraphListener.class);
@@ -74,22 +71,18 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
         logger.debug("Timing: Creating the DAG took " + clock.getTime());
     }
 
-    public void execute() {
+    public void execute(TaskFailureHandler handler) {
         Clock clock = new Clock();
 
+        failureHandler = handler;
         graphListeners.getSource().graphPopulated(this);
-
         try {
             doExecute(executionPlan.values());
             logger.debug("Timing: Executing the DAG took " + clock.getTime());
         } finally {
             executionPlan.clear();
+            failureHandler = null;
         }
-    }
-
-    public void execute(Iterable<? extends Task> tasks) {
-        addTasks(tasks);
-        execute();
     }
 
     private void fillDag(Collection<? extends Task> tasks) {
@@ -168,17 +161,17 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
         taskListeners.add("afterExecute", closure);
     }
 
-    public void useFailureHandler(TaskFailureHandler handler) {
-        this.failureHandler = handler;
-    }
-
     private void doExecute(Iterable<? extends TaskInfo> tasks) {
+        AtomicBoolean stop = new AtomicBoolean();
         for (TaskInfo task : tasks) {
-            executeTask(task);
+            executeTask(task, stop);
+            if (stop.get()) {
+                break;
+            }
         }
     }
 
-    private void executeTask(TaskInfo taskInfo) {
+    private void executeTask(TaskInfo taskInfo, AtomicBoolean stop) {
         TaskInternal task = taskInfo.task;
         for (TaskInfo dependency : taskInfo.dependencies) {
             if (!dependency.executed) {
@@ -191,7 +184,10 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
         try {
             task.executeWithoutThrowingTaskFailure();
             if (task.getState().getFailure() != null) {
-                failureHandler.onTaskFailure(task);
+                boolean keepGoing = failureHandler.onTaskFailure(task);
+                if (!keepGoing) {
+                    stop.set(true);
+                }
             } else {
                 taskInfo.executed = true;
             }

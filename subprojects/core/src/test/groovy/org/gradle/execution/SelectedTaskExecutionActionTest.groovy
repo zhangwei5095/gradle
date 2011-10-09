@@ -44,7 +44,7 @@ class SelectedTaskExecutionActionTest extends Specification {
         action.execute(context)
 
         then:
-        1 * executer.execute()
+        1 * executer.execute(!null)
     }
 
     def "executes selected tasks when continue specified"() {
@@ -55,12 +55,28 @@ class SelectedTaskExecutionActionTest extends Specification {
         action.execute(context)
 
         then:
-        1 * executer.useFailureHandler(!null)
-        1 * executer.execute()
+        1 * executer.execute(!null)
+    }
+
+    def "rethrows single failure after build"() {
+        RuntimeException failure = new RuntimeException()
+
+        given:
+        _ * startParameter.continueOnFailure >> false
+
+        when:
+        action.execute(context)
+
+        then:
+        RuntimeException e = thrown()
+        e == failure
+        1 * executer.execute(!null) >> {
+            def handler = it[0]
+            assert !handler.onTaskFailure(brokenTask(failure))
+        }
     }
 
     def "rethrows single failure after build when continue specified"() {
-        TaskFailureHandler handler
         RuntimeException failure = new RuntimeException()
 
         given:
@@ -72,12 +88,13 @@ class SelectedTaskExecutionActionTest extends Specification {
         then:
         RuntimeException e = thrown()
         e == failure
-        1 * executer.useFailureHandler(!null) >> { handler = it[0] }
-        1 * executer.execute() >> { handler.onTaskFailure(brokenTask(failure)) }
+        1 * executer.execute(!null) >> {
+            def handler = it[0]
+            assert handler.onTaskFailure(brokenTask(failure))
+        }
     }
 
-    def "rethrows failures after build when continue specified"() {
-        TaskFailureHandler handler
+    def "rethrows multiple failures after build when continue specified"() {
         RuntimeException failure1 = new RuntimeException()
         RuntimeException failure2 = new RuntimeException()
 
@@ -90,10 +107,10 @@ class SelectedTaskExecutionActionTest extends Specification {
         then:
         AbstractMultiCauseException e = thrown()
         e.causes == [failure1, failure2]
-        1 * executer.useFailureHandler(!null) >> { handler = it[0] }
-        1 * executer.execute() >> {
-            handler.onTaskFailure(brokenTask(failure1))
-            handler.onTaskFailure(brokenTask(failure2))
+        1 * executer.execute(!null) >> {
+            def handler = it[0]
+            assert handler.onTaskFailure(brokenTask(failure1))
+            assert handler.onTaskFailure(brokenTask(failure2))
         }
     }
 

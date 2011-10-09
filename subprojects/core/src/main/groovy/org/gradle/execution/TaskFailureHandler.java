@@ -21,5 +21,5 @@ public interface TaskFailureHandler {
     /**
      * Called when execution for a task fails. Can throw an exception to abort execution.
      */
-    void onTaskFailure(Task task);
+    boolean onTaskFailure(Task task);
 }

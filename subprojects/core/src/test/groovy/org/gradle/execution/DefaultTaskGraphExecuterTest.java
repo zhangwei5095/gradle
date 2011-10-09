@@ -21,7 +21,6 @@ import org.gradle.api.Task;
 import org.gradle.api.execution.TaskExecutionGraphListener;
 import org.gradle.api.execution.TaskExecutionListener;
 import org.gradle.api.internal.TaskInternal;
-import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.tasks.TaskStateInternal;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.TaskDependency;
@@ -42,7 +41,6 @@ import org.junit.runner.RunWith;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.gradle.util.HelperUtil.createRootProject;
 import static org.gradle.util.HelperUtil.toClosure;
 import static org.gradle.util.WrapUtil.toList;
 import static org.gradle.util.WrapUtil.toSet;
@@ -55,15 +53,14 @@ import static org.junit.Assert.*;
 @RunWith(JMock.class)
 public class DefaultTaskGraphExecuterTest {
 
-    JUnit4Mockery context = new JUnit4GroovyMockery();
-    private final ListenerManager listenerManager = context.mock(ListenerManager.class);
+    final JUnit4Mockery context = new JUnit4GroovyMockery();
+    final ListenerManager listenerManager = context.mock(ListenerManager.class);
+    final TaskFailureHandler failureHandler = context.mock(TaskFailureHandler.class);
+    final List<Task> executedTasks = new ArrayList<Task>();
     DefaultTaskGraphExecuter taskExecuter;
-    ProjectInternal root;
-    List<Task> executedTasks = new ArrayList<Task>();
 
     @Before
     public void setUp() {
-        root = createRootProject();
         context.checking(new Expectations(){{
             one(listenerManager).createAnonymousBroadcaster(TaskExecutionGraphListener.class);
             will(returnValue(new ListenerBroadcast<TaskExecutionGraphListener>(TaskExecutionGraphListener.class)));
@@ -80,7 +77,8 @@ public class DefaultTaskGraphExecuterTest {
         Task c = task("c", b, a);
         Task d = task("d", c);
 
-        taskExecuter.execute(toList(d));
+        taskExecuter.addTasks(toList(d));
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, b, c, d)));
     }
@@ -92,7 +90,8 @@ public class DefaultTaskGraphExecuterTest {
         Task c = task("c");
         Task d = task("d", b, a, c);
 
-        taskExecuter.execute(toList(d));
+        taskExecuter.addTasks(toList(d));
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, b, c, d)));
     }
@@ -103,7 +102,8 @@ public class DefaultTaskGraphExecuterTest {
         Task b = task("b");
         Task c = task("c");
 
-        taskExecuter.execute(toList(b, c, a));
+        taskExecuter.addTasks(toList(b, c, a));
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, b, c)));
     }
@@ -117,7 +117,7 @@ public class DefaultTaskGraphExecuterTest {
 
         taskExecuter.addTasks(toList(c, b));
         taskExecuter.addTasks(toList(d, a));
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(b, c, a, d)));
     }
@@ -132,7 +132,7 @@ public class DefaultTaskGraphExecuterTest {
 
         taskExecuter.addTasks(toList(c));
         taskExecuter.addTasks(toList(e));
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, b, c, d, e)));
     }
@@ -200,7 +200,7 @@ public class DefaultTaskGraphExecuterTest {
         Task b = task("b", a);
 
         taskExecuter.addTasks(toList(b));
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertFalse(taskExecuter.hasTask(":a"));
         assertFalse(taskExecuter.hasTask(a));
@@ -214,7 +214,7 @@ public class DefaultTaskGraphExecuterTest {
         Task c = task("c");
 
         taskExecuter.addTasks(toList(b));
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
         assertThat(executedTasks, equalTo(toList(a, b)));
 
         executedTasks.clear();
@@ -223,7 +223,7 @@ public class DefaultTaskGraphExecuterTest {
 
         assertThat(taskExecuter.getAllTasks(), equalTo(toList(c)));
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(c)));
     }
@@ -255,7 +255,7 @@ public class DefaultTaskGraphExecuterTest {
             one(listener).graphPopulated(taskExecuter);
         }});
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
     }
 
     @Test
@@ -271,7 +271,7 @@ public class DefaultTaskGraphExecuterTest {
             one(runnable).call(taskExecuter);
         }});
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
     }
 
     @Test
@@ -290,7 +290,7 @@ public class DefaultTaskGraphExecuterTest {
             one(listener).afterExecute(with(equalTo(b)), with(notNullValue(TaskState.class)));
         }});
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
     }
 
     @Test
@@ -303,99 +303,66 @@ public class DefaultTaskGraphExecuterTest {
         taskExecuter.addTasks(toList(a));
 
         context.checking(new Expectations() {{
+            ignoring(failureHandler);
             one(listener).beforeExecute(a);
             one(listener).afterExecute(with(sameInstance(a)), with(notNullValue(TaskState.class)));
         }});
 
-        try {
-            taskExecuter.execute();
-            fail();
-        } catch (RuntimeException e) {
-            assertThat(e, sameInstance(failure));
-        }
-        
-        assertThat(executedTasks, equalTo(toList(a)));
-    }
-
-    @Test
-    public void testStopsExecutionOnFirstFailureWhenNoFailureHandlerProvided() {
-        final RuntimeException failure = new RuntimeException();
-        final Task a = brokenTask("a", failure);
-        final Task b = task("b");
-
-        taskExecuter.addTasks(toList(a, b));
-
-        try {
-            taskExecuter.execute();
-            fail();
-        } catch (RuntimeException e) {
-            assertThat(e, sameInstance(failure));
-        }
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a)));
     }
-    
+
     @Test
     public void testStopsExecutionOnFailureWhenFailureHandlerIndicatesThatExecutionShouldStop() {
-        final TaskFailureHandler handler = context.mock(TaskFailureHandler.class);
-
         final RuntimeException failure = new RuntimeException();
         final RuntimeException wrappedFailure = new RuntimeException();
         final Task a = brokenTask("a", failure);
         final Task b = task("b");
 
-        taskExecuter.useFailureHandler(handler);
         taskExecuter.addTasks(toList(a, b));
 
         context.checking(new Expectations(){{
-            one(handler).onTaskFailure(a);
-            will(throwException(wrappedFailure));
+            one(failureHandler).onTaskFailure(a);
+            will(returnValue(false));
         }});
-        try {
-            taskExecuter.execute();
-            fail();
-        } catch (RuntimeException e) {
-            assertThat(e, sameInstance(wrappedFailure));
-        }
+
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a)));
     }
     
     @Test
     public void testContinuesExecutionOnFailureWhenFailureHandlerIndicatesThatExecutionShouldContinue() {
-        final TaskFailureHandler handler = context.mock(TaskFailureHandler.class);
-
         final RuntimeException failure = new RuntimeException();
         final Task a = brokenTask("a", failure);
         final Task b = task("b");
 
-        taskExecuter.useFailureHandler(handler);
         taskExecuter.addTasks(toList(a, b));
 
         context.checking(new Expectations(){{
-            one(handler).onTaskFailure(a);
+            one(failureHandler).onTaskFailure(a);
+            will(returnValue(true));
         }});
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, b)));
     }
     
     @Test
     public void testDoesNotAttemptToExecuteTasksWhoseDependenciesFailedToExecute() {
-        final TaskFailureHandler handler = context.mock(TaskFailureHandler.class);
-
         final RuntimeException failure = new RuntimeException();
         final Task a = brokenTask("a", failure);
         final Task b = task("b", a);
         final Task c = task("c");
 
-        taskExecuter.useFailureHandler(handler);
         taskExecuter.addTasks(toList(b, c));
 
         context.checking(new Expectations() {{
-            one(handler).onTaskFailure(a);
+            one(failureHandler).onTaskFailure(a);
+            will(returnValue(true));
         }});
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
         assertThat(executedTasks, equalTo(toList(a, c)));
     }
     
@@ -414,7 +381,7 @@ public class DefaultTaskGraphExecuterTest {
             one(runnable).call(b);
         }});
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
     }
 
     @Test
@@ -432,7 +399,7 @@ public class DefaultTaskGraphExecuterTest {
             one(runnable).call(b);
         }});
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
     }
 
     @Test
@@ -449,7 +416,7 @@ public class DefaultTaskGraphExecuterTest {
         taskExecuter.addTasks(toList(a, b));
         assertThat(taskExecuter.getAllTasks(), equalTo(toList(b)));
 
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
         
         assertThat(executedTasks, equalTo(toList(b)));
     }
@@ -469,20 +436,18 @@ public class DefaultTaskGraphExecuterTest {
         taskExecuter.addTasks(toList(c));
         assertThat(taskExecuter.getAllTasks(), equalTo(toList(b, c)));
         
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
                 
         assertThat(executedTasks, equalTo(toList(b, c)));
     }
 
     @Test
-    public void willExecuteATaskWhoseDependenciesHaveBeenFilteredOnFailure() {
-        final TaskFailureHandler handler = context.mock(TaskFailureHandler.class);
+    public void willExecuteATaskWhoseDependenciesHaveBeenFilteredAfterAnotherHasFailed() {
         final RuntimeException failure = new RuntimeException();
         final Task a = brokenTask("a", failure);
         final Task b = task("b");
         final Task c = task("c", b);
 
-        taskExecuter.useFailureHandler(handler);
         taskExecuter.useFilter(new Spec<Task>() {
             public boolean isSatisfiedBy(Task element) {
                 return element != b;
@@ -491,9 +456,10 @@ public class DefaultTaskGraphExecuterTest {
         taskExecuter.addTasks(toList(a, c));
 
         context.checking(new Expectations() {{
-            ignoring(handler);
+            allowing(failureHandler).onTaskFailure(a);
+            will(returnValue(true));
         }});
-        taskExecuter.execute();
+        taskExecuter.execute(failureHandler);
 
         assertThat(executedTasks, equalTo(toList(a, c)));
     }

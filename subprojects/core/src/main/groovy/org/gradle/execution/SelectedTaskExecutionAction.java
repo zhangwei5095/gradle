@@ -27,21 +27,22 @@ public class SelectedTaskExecutionAction implements BuildExecutionAction {
     public void execute(BuildExecutionContext context) {
         GradleInternal gradle = context.getGradle();
         TaskGraphExecuter taskGraph = gradle.getTaskGraph();
-        if (gradle.getStartParameter().isContinueOnFailure()) {
-            MultipleFailuresHandler handler = new MultipleFailuresHandler();
-            taskGraph.useFailureHandler(handler);
-            taskGraph.execute();
-            handler.rethrowFailures();
-        } else {
-            taskGraph.execute();
-        }
+        MultipleFailuresHandler handler = new MultipleFailuresHandler(gradle.getStartParameter().isContinueOnFailure());
+        taskGraph.execute(handler);
+        handler.rethrowFailures();
     }
 
     private static class MultipleFailuresHandler implements TaskFailureHandler {
         final List<Throwable> failures = new ArrayList<Throwable>();
-        
-        public void onTaskFailure(Task task) {
+        final boolean continueOnFailure;
+
+        private MultipleFailuresHandler(boolean continueOnFailure) {
+            this.continueOnFailure = continueOnFailure;
+        }
+
+        public boolean onTaskFailure(Task task) {
             failures.add(task.getState().getFailure());
+            return continueOnFailure;
         }
 
         public void rethrowFailures() {

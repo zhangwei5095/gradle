@@ -28,17 +28,12 @@ public interface TaskGraphExecuter extends TaskExecutionGraph {
 
     /**
      * Adds the given tasks and their dependencies to this graph. Tasks are executed in an arbitrary order. The tasks
-     * are executed before any tasks from a subsequent call to this method are executed.
+     * will be executed before any tasks from a subsequent call to this method are executed.
      */
     void addTasks(Iterable<? extends Task> tasks);
 
     /**
      * Executes the tasks in this graph. Discards the contents of this graph when completed.
      */
-    void execute();
-
-    /**
-     * Sets the handler to use when a task fails.
-     */
-    void useFailureHandler(TaskFailureHandler handler);
+    void execute(TaskFailureHandler handler);
 }
