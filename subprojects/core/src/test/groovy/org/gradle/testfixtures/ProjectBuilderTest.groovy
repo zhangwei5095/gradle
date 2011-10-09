@@ -31,7 +31,6 @@ class ProjectBuilderTest extends Specification {
     @Rule public final Resources resources = new Resources()
 
     def canCreateARootProject() {
-
         when:
         def project = ProjectBuilder.builder().build()
 
@@ -54,6 +53,19 @@ class ProjectBuilderTest extends Specification {
         project.projectDir == temporaryFolder.dir
         project.gradle.gradleHomeDir == project.file('gradleHome')
         project.gradle.gradleUserHomeDir == project.file('userHome')
+    }
+
+    def canCreateAChildProject() {
+        given:
+        def builder = ProjectBuilder.builder().withProjectDir(temporaryFolder.dir)
+        def parent = builder.build()
+
+        when:
+        def project = builder.withParent(parent).build()
+
+        then:
+        project.parent == parent
+        parent.childProjects.values().contains(project)
     }
 
     def canApplyACustomPlugin() {
@@ -82,6 +94,21 @@ class ProjectBuilderTest extends Specification {
 
         then:
         project.tasks.hello instanceof DefaultTask
+    }
+
+    def canResolveDependencies() {
+        temporaryFolder.createFile("repo/junit-4.8.2.jar")
+
+        when:
+        def project = ProjectBuilder.builder().withProjectDir(temporaryFolder.dir).build()
+        project.with {
+            repositories { flatDir(dirs: temporaryFolder.file("repo")) }
+            configurations { compile }
+            dependencies { compile "junit:junit:4.8.2" }
+        }
+
+        then:
+        project.configurations.compile.files.collect { it.name} == ['junit-4.8.2.jar']
     }
 }
 
