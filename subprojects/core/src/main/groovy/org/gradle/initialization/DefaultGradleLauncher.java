@@ -146,7 +146,7 @@ public class DefaultGradleLauncher extends GradleLauncher {
         }
 
         // Populate task graph
-        buildExecuter.select(gradle);
+        buildExecuter.configure(gradle);
 
         if (upTo == Stage.PopulateTaskGraph) {
             return;

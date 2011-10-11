@@ -31,7 +31,7 @@ public class DefaultBuildExecuter implements BuildExecuter {
         this.executionActions = GUtil.toList(executionActions);
     }
 
-    public void select(GradleInternal gradle) {
+    public void configure(GradleInternal gradle) {
         this.gradle = gradle;
         configure(0);
     }

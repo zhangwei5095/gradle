@@ -29,7 +29,7 @@ class DefaultBuildExecuterTest extends Specification {
         def buildExecution = new DefaultBuildExecuter([action1, action2], [])
 
         when:
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         then:
         1 * action1.configure(!null)
@@ -44,7 +44,7 @@ class DefaultBuildExecuterTest extends Specification {
         def buildExecution = new DefaultBuildExecuter([action1, action2], [])
 
         when:
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         then:
         1 * action1.configure(!null) >> { it[0].proceed() }
@@ -60,7 +60,7 @@ class DefaultBuildExecuterTest extends Specification {
         def buildExecution = new DefaultBuildExecuter([action1], [])
 
         when:
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         then:
         1 * action1.configure(!null) >> { it[0].proceed() }
@@ -73,7 +73,7 @@ class DefaultBuildExecuterTest extends Specification {
 
         given:
         def buildExecution = new DefaultBuildExecuter([], [action1, action2])
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         when:
         buildExecution.execute()
@@ -89,7 +89,7 @@ class DefaultBuildExecuterTest extends Specification {
 
         given:
         def buildExecution = new DefaultBuildExecuter([], [action1, action2])
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         when:
         buildExecution.execute()
@@ -106,7 +106,7 @@ class DefaultBuildExecuterTest extends Specification {
 
         given:
         def buildExecution = new DefaultBuildExecuter([], [action1])
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         when:
         buildExecution.execute()
@@ -124,7 +124,7 @@ class DefaultBuildExecuterTest extends Specification {
         def buildExecution = new DefaultBuildExecuter([configurationAction], [executionAction])
 
         when:
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
         buildExecution.execute()
 
         then:
@@ -145,7 +145,7 @@ class DefaultBuildExecuterTest extends Specification {
         _ * configurationAction.configure(!null) >> { it[0].displayName = 'display name' }
 
         when:
-        buildExecution.select(gradleInternal)
+        buildExecution.configure(gradleInternal)
 
         then:
         buildExecution.displayName == 'display name'
