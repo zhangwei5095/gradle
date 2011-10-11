@@ -23,7 +23,6 @@ import org.gradle.api.Task;
 import org.gradle.api.execution.TaskExecutionGraphListener;
 import org.gradle.api.execution.TaskExecutionListener;
 import org.gradle.api.internal.TaskInternal;
-import org.gradle.api.internal.tasks.CachingTaskDependencyResolveContext;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
 import org.gradle.listener.ActionBroadcast;
@@ -80,8 +79,8 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
     private void fillDag(Collection<? extends Task> tasks) {
         Set<Task> visiting = new HashSet<Task>();
         List<Task> queue = new ArrayList<Task>();
+        Map<Task, TaskGraphNodeImpl> nodes = new HashMap<Task, TaskGraphNodeImpl>();
         queue.addAll(tasks);
-        CachingTaskDependencyResolveContext context = new CachingTaskDependencyResolveContext();
 
         while (!queue.isEmpty()) {
             Task task = queue.get(0);
@@ -100,8 +99,14 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
                 // Have not seen this task before - add its dependencies to the head of the queue and leave this
                 // task in the queue
                 TaskGraphNodeImpl node = new TaskGraphNodeImpl(task);
+                nodes.put(task, node);
                 nodeListeners.execute(node);
-                node.dependencies.addAll(context.getDependencies(task));
+                for (Task dependee : node.dependees) {
+                    if (!visiting.contains(dependee)) {
+                        queue.add(1, dependee);
+                    }
+                    // Else, the dependee already depends on this task, so leave it where it is
+                }
                 for (Task dependsOnTask : node.dependencies) {
                     if (visiting.contains(dependsOnTask)) {
                         throw new CircularReferenceException(String.format(
@@ -109,26 +114,21 @@ public class DefaultTaskGraphExecuter implements TaskGraphExecuter {
                     }
                     queue.add(0, dependsOnTask);
                 }
-                for (Task dependee : node.dependees) {
-                    if (!visiting.contains(dependee)) {
-                        queue.add(1, dependee);
-                    }
-                    // Else, the dependee already depends on this task, so skip
-                }
             } else {
                 // Have visited this task's dependencies - add it to the end of the plan
                 queue.remove(0);
                 visiting.remove(task);
+                TaskGraphNodeImpl node = nodes.remove(task);
                 Set<TaskInfo> dependencies = new HashSet<TaskInfo>();
-                for (Task dependency : context.getDependencies(task)) {
+                for (Task dependency : node.dependencies) {
                     TaskInfo dependencyInfo = executionPlan.get(dependency);
                     if (dependencyInfo != null) {
                         dependencies.add(dependencyInfo);
                     }
                     // else - the dependency has been filtered, so ignore it
                 }
-                TaskInfo node = new TaskInfo((TaskInternal) task, dependencies);
-                executionPlan.put(task, node);
+                TaskInfo info = new TaskInfo((TaskInternal) task, dependencies);
+                executionPlan.put(task, info);
             }
         }
     }

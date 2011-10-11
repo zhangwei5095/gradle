@@ -23,7 +23,6 @@ import org.gradle.api.execution.TaskExecutionListener
 import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.tasks.TaskStateInternal
 import org.gradle.api.specs.Spec
-import org.gradle.api.tasks.TaskDependency
 import org.gradle.listener.ListenerBroadcast
 import org.gradle.listener.ListenerManager
 import spock.lang.Specification
@@ -41,11 +40,51 @@ class DefaultTaskGraphExecuterTest extends Specification {
         taskExecuter = new DefaultTaskGraphExecuter(listenerManager);
     }
 
+    def executesActionWhenTaskIsAddedToGraph() {
+        Task a = task("a")
+        Action<TaskGraphNode> action = Mock()
+
+        given:
+        taskExecuter.whenTaskAdded(action);
+
+        when:
+        taskExecuter.addTasks([a])
+
+        then:
+        1 * action.execute({it.task == a})
+    }
+
+    def actionCanAddDependencyForTask() {
+        Task a = task("a")
+        Task b = task("b")
+        Action<TaskGraphNode> action = Mock()
+
+        given:
+        taskExecuter.whenTaskAdded(action)
+
+        when:
+        taskExecuter.addTasks([b])
+
+        then:
+        1 * action.execute({it.task == b}) >> {
+            def node = it[0]
+            node.addDependency(a)
+        }
+
+        and:
+        taskExecuter.allTasks == [a, b]
+    }
+
     def executesTasksInDependencyOrder() {
         Task a = task("a")
-        Task b = task("b", a)
-        Task c = task("c", b, a)
-        Task d = task("d", c)
+        Task b = task("b")
+        Task c = task("c")
+        Task d = task("d")
+
+        given:
+        dependsOn(b, a)
+        dependsOn(c, b, a)
+        dependsOn(d, c)
 
         when:
         taskExecuter.addTasks([d])
@@ -59,7 +98,10 @@ class DefaultTaskGraphExecuterTest extends Specification {
         Task a = task("a")
         Task b = task("b")
         Task c = task("c")
-        Task d = task("d", b, a, c)
+        Task d = task("d")
+
+        given:
+        dependsOn(d, b, a, c)
 
         when:
         taskExecuter.addTasks([d])
@@ -100,9 +142,13 @@ class DefaultTaskGraphExecuterTest extends Specification {
     def executesSharedDependenciesOfBatchesOnceOnly() {
         Task a = task("a")
         Task b = task("b")
-        Task c = task("c", a, b)
+        Task c = task("c")
         Task d = task("d")
-        Task e = task("e", b, d)
+        Task e = task("e")
+
+        given:
+        dependsOn(c, a, b)
+        dependsOn(e, b, d)
 
         when:
         taskExecuter.addTasks([c])
@@ -115,11 +161,14 @@ class DefaultTaskGraphExecuterTest extends Specification {
 
     def canGetAllTasksInGraphInExecutionOrder() {
         Task a = task("a")
-        Task b = task("b", a)
-        Task c = task("c", b, a)
-        Task d = task("d", c)
+        Task b = task("b")
+        Task c = task("c")
+        Task d = task("d")
 
         given:
+        dependsOn(b, a)
+        dependsOn(c, b, a)
+        dependsOn(d, c)
         taskExecuter.addTasks([d])
 
         expect:
@@ -128,11 +177,14 @@ class DefaultTaskGraphExecuterTest extends Specification {
 
     def canQueryTheContentsOfTheGraph() {
         Task a = task("a")
-        Task b = task("b", a)
-        Task c = task("c", b, a)
-        Task d = task("d", c)
+        Task b = task("b")
+        Task c = task("c")
+        Task d = task("d")
 
         given:
+        dependsOn(b, a)
+        dependsOn(c, b, a)
+        dependsOn(d, c)
         taskExecuter.addTasks([d])
 
         expect:
@@ -171,9 +223,10 @@ class DefaultTaskGraphExecuterTest extends Specification {
 
     def discardsTasksAfterExecute() {
         Task a = task("a")
-        Task b = task("b", a)
+        Task b = task("b")
 
         given:
+        dependsOn(b, a)
         taskExecuter.addTasks([b])
         taskExecuter.execute(failureHandler)
 
@@ -185,10 +238,11 @@ class DefaultTaskGraphExecuterTest extends Specification {
 
     def canExecuteMultipleTimes() {
         Task a = task("a")
-        Task b = task("b", a)
+        Task b = task("b")
         Task c = task("c")
 
         given:
+        dependsOn(b, a)
         taskExecuter.addTasks([b])
         taskExecuter.execute(failureHandler)
         executedTasks.clear()
@@ -207,9 +261,13 @@ class DefaultTaskGraphExecuterTest extends Specification {
     }
 
     def cannotAddTaskWithCircularReference() {
-        Task a = createTask("a")
-        Task b = task("b", a)
-        Task c = task("c", b)
+        Task a = task("a")
+        Task b = task("b")
+        Task c = task("c")
+
+        given:
+        dependsOn(b, a)
+        dependsOn(c, b)
         dependsOn(a, c)
 
         when:
@@ -374,10 +432,11 @@ class DefaultTaskGraphExecuterTest extends Specification {
     def doesNotAttemptToExecuteTasksWhoseDependenciesFailedToExecute() {
         RuntimeException failure = new RuntimeException()
         Task a = brokenTask("a", failure)
-        Task b = task("b", a)
+        Task b = task("b")
         Task c = task("c")
 
         given:
+        dependsOn(b, a)
         taskExecuter.addTasks([b, c])
 
         when:
@@ -407,11 +466,12 @@ class DefaultTaskGraphExecuterTest extends Specification {
     }
 
     def doesNotExecuteDependenciesOfFilteredTasks() {
-        Task a = task("a", task("dep-a"))
+        Task a = task("a")
         Task b = task("b")
         Spec<Task> spec = {it != a } as Spec
 
         given:
+        dependsOn(a, task("dep-a"))
         taskExecuter.useFilter(spec)
         taskExecuter.addTasks([a, b]);
 
@@ -425,10 +485,11 @@ class DefaultTaskGraphExecuterTest extends Specification {
     def doesNotExecuteFilteredDependencies() {
         Task a = task("a")
         Task b = task("b")
-        Task c = task("c", a, b)
+        Task c = task("c")
         Spec<Task> spec = {it != a } as Spec
 
         given:
+        dependsOn(c, a, b)
         taskExecuter.useFilter(spec)
         taskExecuter.addTasks([c])
 
@@ -443,10 +504,11 @@ class DefaultTaskGraphExecuterTest extends Specification {
         RuntimeException failure = new RuntimeException()
         Task a = brokenTask("a", failure)
         Task b = task("b")
-        Task c = task("c", b)
+        Task c = task("c")
         Spec<Task> spec = {it != b } as Spec
 
         given:
+        dependsOn(c, b)
         taskExecuter.useFilter(spec)
         taskExecuter.addTasks([a, c])
 
@@ -458,45 +520,6 @@ class DefaultTaskGraphExecuterTest extends Specification {
 
         and:
         executedTasks == [a, c]
-    }
-
-    def executesActionWhenTaskIsAddedToGraph() {
-        Task a = task("a")
-        Task b = task("b", a)
-        Action<TaskGraphNode> action = Mock()
-
-        given:
-        taskExecuter.whenTaskAdded(action);
-
-        when:
-        taskExecuter.addTasks([b])
-
-        then:
-        1 * action.execute({it.task == b})
-
-        and:
-        1 * action.execute({it.task == a})
-    }
-
-    def actionCanAddDependencyForTask() {
-        Task a = task("a")
-        Task b = task("b")
-        Action<TaskGraphNode> action = Mock()
-
-        given:
-        taskExecuter.whenTaskAdded(action)
-
-        when:
-        taskExecuter.addTasks([b])
-
-        then:
-        1 * action.execute({it.task == b}) >> {
-            def node = it[0]
-            node.addDependency(a)
-        }
-
-        and:
-        taskExecuter.allTasks == [a, b]
     }
 
     def actionCanAddDependeeForTask() {
@@ -520,13 +543,56 @@ class DefaultTaskGraphExecuterTest extends Specification {
         taskExecuter.allTasks == [b, a]
     }
 
-    def actionCanAddDependeeWhichDependsOnCurrentTask() {
+    def canIntroduceDependenciesAtStartAndEndOfChain() {
         Task a = task("a")
         Task b = task("b")
-        Task c = task("c", a, b)
+        Task c = task("c")
+        Task d = task("d")
+
+        given:
+        dependsOn(c, a)
+        dependsOn(c, b)
+        dependedOnBy(b, a)
+        dependedOnBy(c, d)
+
+        when:
+        taskExecuter.addTasks([c])
+
+        then:
+        taskExecuter.allTasks == [b, a, c, d]
+    }
+
+    def actionCanAddDependenciesAndDependeesForTask() {
+        Task a = task("a")
+        Task b = task("b")
+        Task c = task("c")
         Action<TaskGraphNode> action = Mock()
 
         given:
+        taskExecuter.whenTaskAdded(action)
+
+        when:
+        taskExecuter.addTasks([b])
+
+        then:
+        1 * action.execute({it.task == b}) >> {
+            def node = it[0]
+            node.addDependency(a)
+            node.addDependee(c)
+        }
+
+        and:
+        taskExecuter.allTasks == [a, b, c]
+    }
+
+    def actionCanAddDependeeWhichDependsOnCurrentTask() {
+        Task a = task("a")
+        Task b = task("b")
+        Task c = task("c")
+        Action<TaskGraphNode> action = Mock()
+
+        given:
+        dependsOn(c, a, b)
         taskExecuter.whenTaskAdded(action);
 
         when:
@@ -542,17 +608,56 @@ class DefaultTaskGraphExecuterTest extends Specification {
         taskExecuter.allTasks == [a, b, c]
     }
 
-    private Task brokenTask(String name, RuntimeException failure, Task... dependsOnTasks) {
+    def filterIsAppliedToTasksAddedByAction() {
+        Task a = task("a")
+        Task b = task("b")
+        Task c = task("c")
+        Action<TaskGraphNode> action = Mock()
+        Spec<Task> spec = { it == b } as Spec
+
+        given:
+        taskExecuter.useFilter(spec)
+        taskExecuter.whenTaskAdded(action)
+
+        when:
+        taskExecuter.addTasks([b])
+
+        then:
+        1 * action.execute({it.task == b}) >> {
+            def node = it[0]
+            node.addDependee(a)
+            node.addDependency(c)
+        }
+
+        and:
+        taskExecuter.allTasks == [b]
+    }
+
+    def doesNotAttemptToExecuteDependeeTaskWhenTaskIsNotExecuted() {
+        Task a = task("a")
+        Task b = brokenTask("b", new RuntimeException())
+
+        given:
+        dependedOnBy(b, a)
+        taskExecuter.addTasks([b])
+        _ * failureHandler.onTaskFailure(b) >> true
+
+        when:
+        taskExecuter.execute(failureHandler)
+
+        then:
+        executedTasks == [b]
+    }
+
+    private Task brokenTask(String name, RuntimeException failure) {
         TaskInternal task = createTask(name)
-        dependsOn(task, dependsOnTasks)
         (0..1) * task.executeWithoutThrowingTaskFailure() >> { executedTasks << task }
         _ * task.state.failure >> failure
         return task;
     }
 
-    private Task task(String name, Task... dependsOnTasks) {
+    private Task task(String name) {
         final TaskInternal task = createTask(name)
-        dependsOn(task, dependsOnTasks)
         (0..1) * task.executeWithoutThrowingTaskFailure() >> {
             executedTasks << task
         }
@@ -561,9 +666,19 @@ class DefaultTaskGraphExecuterTest extends Specification {
     }
 
     private void dependsOn(Task task, Task... dependsOn) {
-        TaskDependency taskDependency = Mock()
-        _ * task.taskDependencies >> taskDependency
-        _ * taskDependency.getDependencies(task) >> (dependsOn as Set)
+        taskExecuter.whenTaskAdded { node ->
+            if (node.task == task) {
+                dependsOn.each { node.addDependency(it) }
+            }
+        }
+    }
+
+    private void dependedOnBy(Task task, Task... dependees) {
+        taskExecuter.whenTaskAdded { node ->
+            if (node.task == task) {
+                dependees.each { node.addDependee(it) }
+            }
+        }
     }
 
     private TaskInternal createTask(String name) {

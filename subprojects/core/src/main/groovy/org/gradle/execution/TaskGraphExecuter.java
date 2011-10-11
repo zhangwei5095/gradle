@@ -28,8 +28,11 @@ public interface TaskGraphExecuter extends TaskExecutionGraph {
     void useFilter(Spec<? super Task> filter);
 
     /**
-     * Adds the given tasks and their dependencies to this graph. Tasks are executed in an arbitrary order. The tasks will be executed before any tasks from a subsequent call to this method are
+     * Adds the given tasks to this graph. Tasks are executed in an arbitrary order. The tasks will be executed before any tasks from a subsequent call to this method are
      * executed.
+     * 
+     * <p>Note: this method does not add any dependencies. You should call {@link #whenTaskAdded(org.gradle.api.Action)} to add an action which will
+     * determine the dependencies for each task.</p>
      */
     void addTasks(Iterable<? extends Task> tasks);
 

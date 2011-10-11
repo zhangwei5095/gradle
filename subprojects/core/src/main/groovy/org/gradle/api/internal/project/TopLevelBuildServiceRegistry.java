@@ -225,6 +225,7 @@ public class TopLevelBuildServiceRegistry extends DefaultServiceRegistry impleme
         return new DefaultBuildExecuter(
                 asList(new DefaultTasksBuildExecutionAction(),
                         new ExcludedTaskFilteringBuildConfigurationAction(),
+                        new TaskDependenciesConfigurationAction(),
                         new TaskNameResolvingBuildConfigurationAction()),
                 asList(new DryRunBuildExecutionAction(),
                         new SelectedTaskExecutionAction()));
