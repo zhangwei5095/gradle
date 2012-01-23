@@ -28,13 +28,14 @@ task small(type: GeneratorTask, description: 'Generates a small project') {
 }
 
 task largeSrc(type: GeneratorTask, description: 'Generates a single project with lots of source files') {
-    sourceFiles = 50000
-    linesOfCodePerSourceFile = 20
+    sourceFiles = 10000
+    linesOfCodePerSourceFile = 100
 }
 
 task multi(type: GeneratorTask, description: 'Generates a multi-project build') {
     projects = 25
     sourceFiles = 100
+    linesOfCodePerSourceFile = 100
 }
 
 task mixedSize(type: GeneratorTask) {
