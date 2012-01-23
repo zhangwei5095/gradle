@@ -23,16 +23,21 @@ import org.gradle.api.internal.file.collections.SimpleFileCollection;
 import org.gradle.api.internal.project.ant.BasicAntBuilder;
 import org.gradle.api.internal.tasks.compile.AntJavaCompiler;
 import org.gradle.api.internal.tasks.compile.JavaCompiler;
+import org.gradle.api.internal.tasks.compile.NativeJavaCompiler;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.compile.CompileOptions;
 import org.gradle.internal.Factory;
 import org.gradle.messaging.remote.ObjectConnection;
 import org.gradle.process.internal.WorkerProcessContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.Serializable;
 
 public class CompilationAction implements Action<WorkerProcessContext>, Serializable {
+    private static Logger LOGGER = LoggerFactory.getLogger(CompilationAction.class);
+    
     private FileCollection source;
     private File destinationDir;
     private Iterable<File> classpath;
@@ -71,15 +76,9 @@ public class CompilationAction implements Action<WorkerProcessContext>, Serializ
     public void execute(WorkerProcessContext workerProcessContext) {
         ObjectConnection connection = workerProcessContext.getServerConnection();
         final CompilationListener listener = connection.addOutgoing(CompilationListener.class);
-        
-        Factory<AntBuilder> antBuilderFactory = new Factory<AntBuilder>() {
-            public AntBuilder create() {
-                return new BasicAntBuilder();
-            }
-        };
-        
+
         try {
-            JavaCompiler javaCompiler = new AntJavaCompiler(antBuilderFactory);
+            JavaCompiler javaCompiler = createJavaCompiler();
             javaCompiler.setSource(source);
             javaCompiler.setDestinationDir(destinationDir);
             javaCompiler.setClasspath(classpath);
@@ -92,6 +91,21 @@ public class CompilationAction implements Action<WorkerProcessContext>, Serializ
             listener.completed(new CompilationResult(true, t));
         } finally {
             connection.stop();
+        }
+    }
+
+    private JavaCompiler createJavaCompiler() {
+        if (compileOptions.isUseAnt()) {
+            LOGGER.info("Compiling using Ant");
+            Factory<AntBuilder> antBuilderFactory = new Factory<AntBuilder>() {
+                public AntBuilder create() {
+                    return new BasicAntBuilder();
+                }
+            };
+            return new AntJavaCompiler(antBuilderFactory);
+        } else {
+            LOGGER.info("Compiling using Java 6 Compiler API");
+            return new NativeJavaCompiler();
         }
     }
 
