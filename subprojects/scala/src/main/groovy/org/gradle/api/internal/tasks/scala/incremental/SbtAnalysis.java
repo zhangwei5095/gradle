@@ -1,4 +1,4 @@
-package org.gradle.api.tasks.scala.incremental;
+package org.gradle.api.internal.tasks.scala.incremental;
 
 import sbt.compiler.IC;
 import sbt.inc.Analysis;

@@ -18,10 +18,10 @@ package org.gradle.api.tasks.scala;
 import org.gradle.api.AntBuilder;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileTree;
-import org.gradle.api.internal.project.IsolatedAntBuilder;
 import org.gradle.api.internal.tasks.compile.AntJavaCompiler;
 import org.gradle.api.internal.tasks.compile.JavaCompileSpec;
 import org.gradle.api.internal.tasks.scala.*;
+import org.gradle.api.internal.tasks.scala.incremental.SbtScalaCompiler;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.compile.AbstractCompile;
@@ -38,7 +38,7 @@ public class ScalaCompile extends AbstractCompile {
 
     public ScalaCompile() {
         //Compiler<ScalaCompileSpec> scalaCompiler = new AntScalaCompiler(getServices().get(IsolatedAntBuilder.class));
-        Compiler<ScalaCompileSpec> scalaCompiler = new NewIncrementalScalaCompiler();
+        Compiler<ScalaCompileSpec> scalaCompiler = new SbtScalaCompiler();
         Compiler<JavaCompileSpec> javaCompiler = new AntJavaCompiler(getServices().getFactory(AntBuilder.class));
         compiler = new IncrementalScalaCompiler(new DefaultScalaJavaJointCompiler(scalaCompiler, javaCompiler), getOutputs());
     }

@@ -1,4 +1,4 @@
-package org.gradle.api.tasks.scala.incremental;
+package org.gradle.api.internal.tasks.scala.incremental;
 
 import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
@@ -13,18 +13,11 @@ import xsbti.compile.DefinesClass;
 import xsbti.compile.GlobalsCache;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class SbtIncrementalCompiler {
-    public static final String SBT_GROUP_ID = "com.typesafe.sbt";
-    public static final String COMPILER_INTEGRATION_ARTIFACT_ID = "incremental-compiler";
-    public static final String COMPILER_INTERFACE_ARTIFACT_ID = "compiler-interface";
-    public static final String COMPILER_INTERFACE_CLASSIFIER = "sources";
-    public static final String XSBTI_ARTIFACT_ID = "sbt-interface";
-
     private xsbti.Logger logger;
 
     private SbtCompilers compilers;
