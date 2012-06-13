@@ -17,12 +17,15 @@
 package org.gradle.api.internal.tasks.scala;
 
 import org.gradle.api.internal.tasks.compile.JvmLanguageCompileSpec;
+import org.gradle.api.tasks.scala.IncrementalCompileOptions;
 import org.gradle.api.tasks.scala.ScalaCompileOptions;
 
 import java.io.File;
 
 public interface ScalaCompileSpec extends JvmLanguageCompileSpec {
     ScalaCompileOptions getScalaCompileOptions();
+
+    IncrementalCompileOptions getIncrementalCompileOptions();
 
     Iterable<File> getScalaClasspath();
 

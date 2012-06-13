@@ -17,16 +17,22 @@
 package org.gradle.api.internal.tasks.scala;
 
 import org.gradle.api.internal.tasks.compile.DefaultJavaCompileSpec;
+import org.gradle.api.tasks.scala.IncrementalCompileOptions;
 import org.gradle.api.tasks.scala.ScalaCompileOptions;
 
 import java.io.File;
 
 public class DefaultScalaJavaJointCompileSpec extends DefaultJavaCompileSpec implements ScalaJavaJointCompileSpec {
-    private final ScalaCompileOptions options = new ScalaCompileOptions();
+    private final ScalaCompileOptions scalaOptions = new ScalaCompileOptions();
+    private final IncrementalCompileOptions incrementalCompileOptions = new IncrementalCompileOptions();
     private Iterable<File> scalaClasspath;
 
     public ScalaCompileOptions getScalaCompileOptions() {
-        return options;
+        return scalaOptions;
+    }
+
+    public IncrementalCompileOptions getIncrementalCompileOptions() {
+        return incrementalCompileOptions;
     }
 
     public Iterable<File> getScalaClasspath() {
