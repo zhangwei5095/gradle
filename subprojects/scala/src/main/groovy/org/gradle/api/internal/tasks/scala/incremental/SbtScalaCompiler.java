@@ -49,7 +49,7 @@ public class SbtScalaCompiler implements org.gradle.api.internal.tasks.compile.C
         List<String> javacOptions = Collections.emptyList(); // TODO
 
         try {
-            incremental.compile(spec.getScalaClasspath(), spec.getSource(), spec.getDestinationDir(),
+            incremental.compile(spec.getClasspath(), spec.getSource(), spec.getDestinationDir(),
                     scalacOptions, javacOptions, options.getCacheFile(), options.getAllCacheFiles());
         } catch (xsbti.CompileFailed e) {
             throw new CompilationFailedException(e.getMessage());

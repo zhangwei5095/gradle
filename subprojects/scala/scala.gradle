@@ -18,9 +18,9 @@ dependencies {
 
     compile project(':core')
     compile project(':plugins')
-    compile "com.typesafe.sbt:compiler-interface:0.12.0-RC1:sources"
     compile "com.typesafe.sbt:incremental-compiler:0.12.0-RC1"
     compile "com.typesafe.sbt:sbt-interface:0.12.0-RC1"
+    compile "com.typesafe.sbt:compiler-interface:0.12.0-RC1" // not necessary, just added for debugging purposes
 
     testCompile libraries.slf4j_api
 }

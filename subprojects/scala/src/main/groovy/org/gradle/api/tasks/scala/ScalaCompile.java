@@ -72,6 +72,14 @@ public class ScalaCompile extends AbstractCompile {
     }
 
     /**
+     * Returns the Scala compilation options.
+     */
+    @Nested
+    public IncrementalCompileOptions getIncrementalCompileOptions() {
+        return spec.getIncrementalCompileOptions();
+    }
+
+    /**
      * Returns the Java compilation options.
      */
     @Nested
