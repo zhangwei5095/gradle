@@ -37,10 +37,9 @@ public class ScalaCompile extends AbstractCompile {
     private final ScalaJavaJointCompileSpec spec = new DefaultScalaJavaJointCompileSpec();
 
     public ScalaCompile() {
-        //Compiler<ScalaCompileSpec> scalaCompiler = new AntScalaCompiler(getServices().get(IsolatedAntBuilder.class));
         Compiler<ScalaCompileSpec> scalaCompiler = new SbtScalaCompiler();
         Compiler<JavaCompileSpec> javaCompiler = new AntJavaCompiler(getServices().getFactory(AntBuilder.class));
-        compiler = new IncrementalScalaCompiler(new DefaultScalaJavaJointCompiler(scalaCompiler, javaCompiler), getOutputs());
+        compiler = new DefaultScalaJavaJointCompiler(scalaCompiler, javaCompiler);
     }
 
     /**

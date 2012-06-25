@@ -32,7 +32,7 @@ public class IncrementalCompileOptions implements Serializable {
     private Map<File, File> allCacheFiles;
     private String scalaVersion;
     private String sbtVersion;
-    private int residentCompilerLimit;
+    private int residentCompilerLimit = 999;
 
     @InputFile
     public File getCompilerJar() {
