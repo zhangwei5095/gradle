@@ -1,0 +1,66 @@
+apply plugin: "scala"
+apply plugin: "idea"
+
+repositories {
+  mavenCentral()
+}
+
+configurations {
+  sbt
+}
+
+ext.scalaVersion = "2.9.2"
+ext.sbtVersion = "0.12.0-RC2"
+
+dependencies {
+  scalaTools "org.scala-lang:scala-compiler:$scalaVersion"
+  scalaTools "org.scala-lang:scala-library:$scalaVersion"
+  scalaTools "com.typesafe.sbt:incremental-compiler:$sbtVersion"
+
+  sbt "com.typesafe.sbt:sbt-interface:$sbtVersion"
+  sbt "com.typesafe.sbt:compiler-interface:$sbtVersion:sources"
+
+  compile "org.scala-lang:scala-library:$scalaVersion"
+  compile "commons-collections:commons-collections:3.2"
+  testCompile "junit:junit:4.8.2"
+}
+
+compileScala {
+  incrementalCompileOptions.with {
+    libraryJar = configurations.scalaTools.find { it.name.contains("scala-library") }
+    println libraryJar
+    compilerJar = configurations.scalaTools.find { it.name.contains("scala-compiler") }
+    println compilerJar
+    sbtInterfaceJar = configurations.sbt.find { it.name.contains("sbt-interface") }
+    println sbtInterfaceJar
+    compilerInterfaceSourceJar = configurations.sbt.find { it.name.contains("compiler-interface") }
+    println compilerInterfaceSourceJar
+    cacheFile = file("$buildDir/caches/compileScala")
+    allCacheFiles = [(sourceSets.main.output.classesDir): file("$buildDir/caches/compileScala"),
+        (sourceSets.test.output.classesDir): file("$buildDir/caches/compileTestScala")]
+    scalaVersion = project.scalaVersion
+    sbtVersion = project.sbtVersion
+  }
+}
+
+compileTestScala {
+  incrementalCompileOptions.with {
+    libraryJar = configurations.scalaTools.find { it.name.contains("scala-library") }
+    println libraryJar
+    compilerJar = configurations.scalaTools.find { it.name.contains("scala-compiler") }
+    println compilerJar
+    sbtInterfaceJar = configurations.sbt.find { it.name.contains("sbt-interface") }
+    println sbtInterfaceJar
+    compilerInterfaceSourceJar = configurations.sbt.find { it.name.contains("compiler-interface") }
+    println compilerInterfaceSourceJar
+    cacheFile = file("$buildDir/caches/compileTestScala")
+    allCacheFiles = [(sourceSets.main.output.classesDir): file("$buildDir/caches/compileScala"),
+        (sourceSets.test.output.classesDir): file("$buildDir/caches/compileTestScala")]
+    scalaVersion = project.scalaVersion
+    sbtVersion = project.sbtVersion
+  }
+}
+
+task debug << {
+    println sourceSets.main.output.classesDir
+}
