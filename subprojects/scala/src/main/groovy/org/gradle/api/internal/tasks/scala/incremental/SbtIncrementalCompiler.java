@@ -1,7 +1,7 @@
 package org.gradle.api.internal.tasks.scala.incremental;
 
 import com.google.common.collect.Iterables;
-import org.slf4j.Logger;
+import org.gradle.api.logging.Logger;
 import sbt.compiler.AnalyzingCompiler;
 import sbt.compiler.CompilerCache;
 import sbt.compiler.CompilerCache$;

@@ -22,19 +22,15 @@ dependencies {
 
   compile "org.scala-lang:scala-library:$scalaVersion"
   compile "commons-collections:commons-collections:3.2"
-  testCompile "junit:junit:4.8.2"
+  testCompile "junit:junit:4.10"
 }
 
 compileScala {
   incrementalCompileOptions.with {
     libraryJar = configurations.scalaTools.find { it.name.contains("scala-library") }
-    println libraryJar
     compilerJar = configurations.scalaTools.find { it.name.contains("scala-compiler") }
-    println compilerJar
     sbtInterfaceJar = configurations.sbt.find { it.name.contains("sbt-interface") }
-    println sbtInterfaceJar
     compilerInterfaceSourceJar = configurations.sbt.find { it.name.contains("compiler-interface") }
-    println compilerInterfaceSourceJar
     cacheFile = file("$buildDir/caches/compileScala")
     allCacheFiles = [(sourceSets.main.output.classesDir): file("$buildDir/caches/compileScala"),
         (sourceSets.test.output.classesDir): file("$buildDir/caches/compileTestScala")]
@@ -46,13 +42,9 @@ compileScala {
 compileTestScala {
   incrementalCompileOptions.with {
     libraryJar = configurations.scalaTools.find { it.name.contains("scala-library") }
-    println libraryJar
     compilerJar = configurations.scalaTools.find { it.name.contains("scala-compiler") }
-    println compilerJar
     sbtInterfaceJar = configurations.sbt.find { it.name.contains("sbt-interface") }
-    println sbtInterfaceJar
     compilerInterfaceSourceJar = configurations.sbt.find { it.name.contains("compiler-interface") }
-    println compilerInterfaceSourceJar
     cacheFile = file("$buildDir/caches/compileTestScala")
     allCacheFiles = [(sourceSets.main.output.classesDir): file("$buildDir/caches/compileScala"),
         (sourceSets.test.output.classesDir): file("$buildDir/caches/compileTestScala")]
