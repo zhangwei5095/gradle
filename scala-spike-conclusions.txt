@@ -1,0 +1,24 @@
+This is the email sent to the Gradleware team list at the end of the incremental scala compiler spike.
+
+Hi,
+
+as mentioned in our Monday meeting, I eventually got the sbt integration to work. All code is on the incremental-scala-compiler branch. For benchmarks I used the quickstart/scala sample, which I adapted as needed (added more source code, configured incremental compiler in build.gradle). Note that the ScalaCompile task on the incremental-scala-compiler branch can, at this time, _only_ do sbt incremental compilation. There is no switch to enable the old Ant scalac integration.
+
+Here are some numbers. Times are in seconds. 2 source sets, 10 files each (each of which contains a slightly adapted version of http://www.scala-lang.org/node/56), files don't depend on each other. Gradle daemon turned on. Command:
+
+gradle --no-search-upward -b build-incremental.gradle compileScala compileTestScala
+
+Compiler integration      First clean build Second clean build Build w/o clean (1 file changed) Build w/o clean (2 files changed, one per source set)   
+sbt incremental compiler  60                45                 16                               32
+Ant scalac task           40                30                 30                               30
+
+After a while I realized that these numbers are heavily dominated by class loading and resulting effects (code being warm or not, permgen filling up). For good performance, it's essential to keep the classes for the Scala compiler and library to be compiled against around, instead of reloading them for every compile task. The Ant scalac integration already caches the classes within the same build. This explains why it is so much faster on a clean build: The 30 seconds divide up into 22 for the first compile task and 8 for the second one, even though they are both compiling the same (duplicated) code.
+
+Log output from sbt looks good. Compiler settings are correct, and changed files are detected correctly. Unfortunately, the sbt compiler has a direct dependency on scala-compiler-2.9.2, which (together with transitive dependencies) has a 20MB footprint. This probably means that we would have to ship this as an external plugin. I don't consider this a problem, except that we don't have a good external plugin story yet.
+
+During our conversation, Mark Harrah (sbt lead) told me that they are developing a Scala compiler daemon (similar to fsc) that uses sbt's incremental compiler: https://github.com/typesafehub/zinc. This sounds like a cheap option to improve our Scala support. Then again, Mark said that direct integration with sbt (as done in my spike) would likely yield the best results. It would also give us more control over what's happening (e.g. when daemons are started and stopped).
+
+This concludes my spike. To sum up, the most important aspect of getting better Scala compiler performance (apart from integrating with sbt) is to reuse the class loader for the Scala compiler/library to be compiled against between compiler invocations and builds. Reuse within the same build would be relatively easy to achieve by integrating with our compiler daemon. Reuse across builds would require enhancements to the compiler daemon, enhancements to the Gradle daemon, or use of Scala's new standalone compiler daemon.
+
+Cheers,
+Peter
