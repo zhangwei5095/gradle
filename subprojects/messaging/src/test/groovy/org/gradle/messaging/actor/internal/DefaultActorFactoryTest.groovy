@@ -28,7 +28,9 @@ import org.junit.runner.RunWith
 import static org.junit.Assert.*
 import static org.hamcrest.Matchers.*
 import org.gradle.internal.concurrent.ThreadSafe
+import org.junit.Ignore
 
+@Ignore
 @RunWith(JMock.class)
 class DefaultActorFactoryTest extends MultithreadedTestCase {
     private final JUnit4GroovyMockery context = new JUnit4GroovyMockery()
