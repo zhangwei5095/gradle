@@ -34,6 +34,8 @@ libraries.ivy = dependencies.module('org.apache.ivy:ivy:2.2.0'){
     dependency "com.jcraft:jsch:0.1.46"
 }
 libraries.jcip = "net.jcip:jcip-annotations:1.0@jar"
+libraries.jsoup = "org.jsoup:jsoup:1.6.3"
+
 libraries.inject = dependencies.module('javax.inject:javax.inject:1')
 
 // Logging

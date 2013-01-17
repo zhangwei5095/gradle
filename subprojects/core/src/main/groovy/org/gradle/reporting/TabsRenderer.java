@@ -15,15 +15,13 @@
  */
 package org.gradle.reporting;
 
-import org.w3c.dom.Element;
-
 import java.util.ArrayList;
 import java.util.List;
 
-public class TabsRenderer<T> extends DomReportRenderer<T> {
+public class TabsRenderer<T> extends AbstractHtmlReportRenderer<T> {
     private final List<TabDefinition> tabs = new ArrayList<TabDefinition>();
 
-    public void add(String title, DomReportRenderer<T> contentRenderer) {
+    public void add(String title, AbstractHtmlReportRenderer<T> contentRenderer) {
         tabs.add(new TabDefinition(title, contentRenderer));
     }
 
@@ -32,28 +30,34 @@ public class TabsRenderer<T> extends DomReportRenderer<T> {
     }
 
     @Override
-    public void render(T model, Element parent) {
-        Element tabs = appendWithId(parent, "div", "tabs");
-        Element ul = append(tabs, "ul");
-        ul.setAttribute("class", "tabLinks");
-        for (int i = 0; i < this.tabs.size(); i++) {
-            TabDefinition tab = this.tabs.get(i);
-            Element li = append(ul, "li");
-            Element a = appendWithText(li, "a", tab.title);
-            String tabId = String.format("tab%s", i);
-            a.setAttribute("href", "#" + tabId);
-            Element tabDiv = appendWithId(tabs, "div", tabId);
-            tabDiv.setAttribute("class", "tab");
-            appendWithText(tabDiv, "h2", tab.title);
-            tab.renderer.render(model, tabDiv);
-        }
+    public void render(T model, HtmlBuilder parent) {
+        parent.div().attr("id", "tabs");
+            parent.ul().classAttr("tabLinks");
+                for (int i = 0; i < this.tabs.size(); i++) {
+                    TabDefinition tab = this.tabs.get(i);
+                    String tabId = String.format("tab%s", i);
+                    parent.li();
+                        parent.a().href("#" + tabId).text(tab.title).end();
+                    parent.end();
+                }
+            parent.end();
+
+            for (int i = 0; i < this.tabs.size(); i++) {
+                TabDefinition tab = this.tabs.get(i);
+                String tabId = String.format("tab%s", i);
+                parent.div().attr("id", tabId).classAttr("tab");
+                    parent.h2().text(tab.title).end();
+                    tab.renderer.render(model, parent);
+                parent.end();
+            }
+        parent.end();
     }
 
     private class TabDefinition {
         final String title;
-        final DomReportRenderer<T> renderer;
+        final AbstractHtmlReportRenderer<T> renderer;
 
-        private TabDefinition(String title, DomReportRenderer<T> renderer) {
+        private TabDefinition(String title, AbstractHtmlReportRenderer<T> renderer) {
             this.title = title;
             this.renderer = renderer;
         }

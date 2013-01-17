@@ -16,44 +16,48 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.gradle.api.Action;
-import org.w3c.dom.Element;
+import org.gradle.reporting.HtmlBuilder;
 
 class PackagePageRenderer extends PageRenderer<PackageTestResults> {
 
-    @Override protected void renderBreadcrumbs(Element parent) {
-        Element div = append(parent, "div");
-        div.setAttribute("class", "breadcrumbs");
-        appendLink(div, "index.html", "all");
-        appendText(div, String.format(" > %s", getResults().getName()));
+    @Override protected void renderBreadcrumbs(HtmlBuilder parent) {
+        parent.div().classAttr("breadcrumbs");
+            parent.a().href("index.html").text("all").end();
+            parent.text(String.format(" > %s", getResults().getName()));
+        parent.end();
     }
 
-    private void renderClasses(Element parent) {
-        Element table = append(parent, "table");
-        Element thead = append(table, "thead");
-        Element tr = append(thead, "tr");
-        appendWithText(tr, "th", "Class");
-        appendWithText(tr, "th", "Tests");
-        appendWithText(tr, "th", "Failures");
-        appendWithText(tr, "th", "Duration");
-        appendWithText(tr, "th", "Success rate");
+    private void renderClasses(HtmlBuilder parent) {
+        parent.table();
+        parent.thead();
+            parent.tr();
+                parent.th().text("Class").end();
+                parent.th().text("Tests").end();
+                parent.th().text("Failures").end();
+                parent.th().text("Duration").end();
+                parent.th().text("Success rate").end();
+            parent.end();
+        parent.end();
+
         for (ClassTestResults testClass : getResults().getClasses()) {
-            tr = append(table, "tr");
-            Element td = append(tr, "td");
-            td.setAttribute("class", testClass.getStatusClass());
-            appendLink(td, String.format("%s.html", testClass.getName()), testClass.getSimpleName());
-            appendWithText(tr, "td", testClass.getTestCount());
-            appendWithText(tr, "td", testClass.getFailureCount());
-            appendWithText(tr, "td", testClass.getFormattedDuration());
-            td = appendWithText(tr, "td", testClass.getFormattedSuccessRate());
-            td.setAttribute("class", testClass.getStatusClass());
+            parent.tr();
+                parent.td().classAttr(testClass.getStatusClass());
+                    parent.a().href(String.format("%s.html", testClass.getName())).text(testClass.getSimpleName()).end();
+                parent.end();
+                parent.td().text(Integer.toString(testClass.getTestCount())).end();
+                parent.td().text(Integer.toString(testClass.getFailureCount())).end();
+                parent.td().text(testClass.getFormattedDuration()).end();
+                parent.td().classAttr(testClass.getStatusClass()).text(testClass.getFormattedSuccessRate()).end();
+            parent.end();
         }
+        parent.end();
     }
 
     @Override protected void registerTabs() {
         addFailuresTab();
-        addTab("Classes", new Action<Element>() {
-            public void execute(Element element) {
-                renderClasses(element);
+        addTab("Classes", new Action<HtmlBuilder>() {
+            public void execute(HtmlBuilder html) {
+                renderClasses(html);
             }
         });
     }

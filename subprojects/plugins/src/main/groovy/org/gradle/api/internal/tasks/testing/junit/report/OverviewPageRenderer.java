@@ -16,72 +16,85 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.gradle.api.Action;
-import org.w3c.dom.Element;
+import org.gradle.reporting.HtmlBuilder;
 
 class OverviewPageRenderer extends PageRenderer<AllTestResults> {
 
-    @Override protected void registerTabs() {
+    @Override
+    protected void registerTabs() {
         addFailuresTab();
         if (!getResults().getPackages().isEmpty()) {
-            addTab("Packages", new Action<Element>() {
-                public void execute(Element element) {
+            addTab("Packages", new Action<HtmlBuilder>() {
+                public void execute(HtmlBuilder element) {
                     renderPackages(element);
                 }
             });
         }
-        addTab("Classes", new Action<Element>() {
-            public void execute(Element element) {
+        addTab("Classes", new Action<HtmlBuilder>() {
+            public void execute(HtmlBuilder element) {
                 renderClasses(element);
             }
         });
     }
 
-    @Override protected void renderBreadcrumbs(Element element) {
+    @Override
+    protected void renderBreadcrumbs(HtmlBuilder element) {
     }
 
-    private void renderPackages(Element parent) {
-        Element table = append(parent, "table");
-        Element thead = append(table, "thead");
-        Element tr = append(thead, "tr");
-        appendWithText(tr, "th", "Package");
-        appendWithText(tr, "th", "Tests");
-        appendWithText(tr, "th", "Failures");
-        appendWithText(tr, "th", "Duration");
-        appendWithText(tr, "th", "Success rate");
+    private void renderPackages(HtmlBuilder parent) {
+        parent.table();
+        parent.thead();
+        parent.tr();
+
+        parent.th().text("Package").end();
+        parent.th().text("Tests").end();
+        parent.th().text("Failures").end();
+        parent.th().text("Duration").end();
+        parent.th().text("Success rate").end();
+        parent.end();
+        parent.end();
+        parent.tbody();
         for (PackageTestResults testPackage : getResults().getPackages()) {
-            tr = append(table, "tr");
-            Element td = append(tr, "td");
-            td.setAttribute("class", testPackage.getStatusClass());
-            appendLink(td, String.format("%s.html", testPackage.getName()), testPackage.getName());
-            appendWithText(tr, "td", testPackage.getTestCount());
-            appendWithText(tr, "td", testPackage.getFailureCount());
-            appendWithText(tr, "td", testPackage.getFormattedDuration());
-            td = appendWithText(tr, "td", testPackage.getFormattedSuccessRate());
-            td.setAttribute("class", testPackage.getStatusClass());
+            parent.tr();
+                parent.td().classAttr(testPackage.getStatusClass());
+                    parent.a().href(String.format("%s.html", testPackage.getName())).text(testPackage.getName()).end();
+                parent.end();
+                parent.td().text(Integer.toString(testPackage.getTestCount())).end();
+                parent.td().text(Integer.toString(testPackage.getFailureCount())).end();
+                parent.td().text(testPackage.getFormattedDuration()).end();
+                parent.td().classAttr(testPackage.getStatusClass()).text(testPackage.getFormattedSuccessRate()).end();
+            parent.end();
         }
+        parent.end();
+        parent.end();
     }
 
-    private void renderClasses(Element parent) {
-        Element table = append(parent, "table");
-        Element thead = append(table, "thead");
-        Element tr = append(thead, "tr");
-        appendWithText(tr, "th", "Class");
-        appendWithText(tr, "th", "Tests");
-        appendWithText(tr, "th", "Failures");
-        appendWithText(tr, "th", "Duration");
-        appendWithText(tr, "th", "Success rate");
+    private void renderClasses(HtmlBuilder parent) {
+        parent.table();
+        parent.thead();
+            parent.tr();
+                parent.th().text("Class").end();
+                parent.th().text("Tests").end();
+                parent.th().text("Failures").end();
+                parent.th().text("Duration").end();
+                parent.th().text("Success rate").end();
+            parent.end();
+        parent.end();
+        parent.tbody();
+
         for (PackageTestResults testPackage : getResults().getPackages()) {
             for (ClassTestResults testClass : testPackage.getClasses()) {
-                tr = append(table, "tr");
-                Element td = append(tr, "td");
-                td.setAttribute("class", testClass.getStatusClass());
-                appendLink(td, String.format("%s.html", testClass.getName()), testClass.getName());
-                appendWithText(tr, "td", testClass.getTestCount());
-                appendWithText(tr, "td", testClass.getFailureCount());
-                appendWithText(tr, "td", testClass.getFormattedDuration());
-                td = appendWithText(tr, "td", testClass.getFormattedSuccessRate());
-                td.setAttribute("class", testClass.getStatusClass());
+                parent.tr();
+                    parent.td().classAttr(testClass.getStatusClass()).end();
+                    parent.a().href(String.format("%s.html", testClass.getName())).text(testClass.getName()).end();
+                    parent.td().text(Integer.toString(testClass.getTestCount())).end();
+                    parent.td().text(Integer.toString(testClass.getFailureCount())).end();
+                    parent.td().text(testClass.getFormattedDuration()).end();
+                    parent.td().classAttr(testClass.getStatusClass()).text(testClass.getFormattedSuccessRate()).end();
+                parent.end();
             }
         }
+        parent.end();
+        parent.end();
     }
 }

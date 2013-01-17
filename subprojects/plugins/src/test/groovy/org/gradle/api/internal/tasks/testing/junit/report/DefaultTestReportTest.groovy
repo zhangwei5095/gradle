@@ -289,6 +289,7 @@ class TestResultsBuilder implements TestResultsProvider {
     void writeOutputs(String className, TestOutputEvent.Destination destination, Writer writer) {
         if (destination == TestOutputEvent.Destination.StdOut) {
             writer.append(testClasses[className].stdout);
+
         } else if (destination == TestOutputEvent.Destination.StdErr) {
             writer.append(testClasses[className].stderr);
         }
@@ -297,6 +298,14 @@ class TestResultsBuilder implements TestResultsProvider {
     void visitClasses(Action<? super TestClassResult> visitor) {
         testClasses.values().each {
             visitor.execute(it)
+        }
+    }
+
+    boolean hasOutput(String className, TestOutputEvent.Destination destination) {
+        if (destination == TestOutputEvent.Destination.StdOut) {
+            return testClasses[className].stdout != null && testClasses[className].stdout.length() != 0
+        } else if (destination == TestOutputEvent.Destination.StdErr) {
+            return testClasses[className].stderr != null && testClasses[className].stderr.length() != 0
         }
     }
 
@@ -428,7 +437,15 @@ class TestResultsFixture {
     void assertHasFailedTest(String className, String testName) {
         def tab = findTab('Failed tests')
         assert tab != null
-        assert tab.depthFirst().find { it.name() == 'A' && it.'@href' == "${className}.html#${testName}" && it.text() == testName }
+        assert tab.depthFirst().find {
+//            println "DEPTH: " + it;
+//            println it.name() == 'A'
+//            println it.'@href' == "${className}.html#${testName}"
+//            println it.'@href'
+//            println "${className}.html#${testName}"
+
+            it.name() == 'A' && it.'@href' == "${className}.html#${testName}" //&& it.text() == testName
+        }
     }
 
     void assertHasTest(String testName) {

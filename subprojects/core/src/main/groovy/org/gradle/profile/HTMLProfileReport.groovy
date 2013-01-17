@@ -15,6 +15,8 @@
  */
 package org.gradle.profile
 
+import org.gradle.reporting.HtmlBuilder
+
 import java.text.SimpleDateFormat
 
 import groovy.text.SimpleTemplateEngine
@@ -28,6 +30,11 @@ class HTMLProfileReport extends TextReportRenderer<BuildProfile> {
     protected void writeTo(BuildProfile profile, Writer out) {
         def templateStream = getClass().getResourceAsStream('/org/gradle/profile/ProfileTemplate.html')
         def template
+        HtmlBuilder html = new HtmlBuilder(out);
+        html.bind('build', profile)
+        html.bind('time', DURATION_FORMAT)
+        html.bind('date', DATE_FORMAT)
+
         try {
             SimpleTemplateEngine engine = new SimpleTemplateEngine()
             template = engine.createTemplate(new InputStreamReader(templateStream))

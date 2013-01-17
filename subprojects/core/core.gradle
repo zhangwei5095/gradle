@@ -41,6 +41,7 @@ dependencies {
     compile libraries.jul_to_slf4j
     compile module('com.googlecode.jarjar:jarjar:1.3')
     compile libraries.inject
+    compile 'com.googlecode.jatl:jatl:0.2.2'
 
     compile project(":cli")
     compile project(":native")
@@ -50,6 +51,7 @@ dependencies {
 
     testCompile libraries.log4j_to_slf4j
     testCompile libraries.jcl_to_slf4j
+    testCompile libraries.jsoup
 
     testRuntime libraries.xerces
     testRuntime project(":diagnostics")

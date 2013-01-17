@@ -19,7 +19,7 @@ import org.gradle.api.Action;
 import org.gradle.api.internal.tasks.testing.junit.result.TestResultsProvider;
 import org.gradle.api.tasks.testing.TestOutputEvent;
 import org.gradle.reporting.CodePanelRenderer;
-import org.w3c.dom.Element;
+import org.gradle.reporting.HtmlBuilder;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -35,68 +35,77 @@ class ClassPageRenderer extends PageRenderer<ClassTestResults> {
     }
 
     @Override
-    protected void renderBreadcrumbs(Element parent) {
-        Element div = append(parent, "div");
-        div.setAttribute("class", "breadcrumbs");
-        appendLink(div, "index.html", "all");
-        appendText(div, " > ");
-        appendLink(div, String.format("%s.html", getResults().getPackageResults().getName()), getResults().getPackageResults().getName());
-        appendText(div, String.format(" > %s", getResults().getSimpleName()));
+    protected void renderBreadcrumbs(HtmlBuilder parent) {
+        parent.div().classAttr("breadcrumbs");
+        parent.a().href("index.html").text("all").end();
+        parent.text(" > ");
+        parent.a().href(String.format("%s.html", getResults().getPackageResults().getName())).text(getResults().getPackageResults().getName()).end();
+        parent.text(String.format(" > %s", getResults().getSimpleName()));
+        parent.end();
     }
 
-    private void renderTests(Element parent) {
-        Element table = append(parent, "table");
-        Element thead = append(table, "thead");
-        Element tr = append(thead, "tr");
-        appendWithText(tr, "th", "Test");
-        appendWithText(tr, "th", "Duration");
-        appendWithText(tr, "th", "Result");
+    private void renderTests(HtmlBuilder parent) {
+        parent.table();
+        parent.thead();
+        parent.tr();
+        parent.th().text("Test").end();
+        parent.th().text("Duration").end();
+        parent.th().text("Result").end();
+        parent.end();
+        parent.end();
+
         for (TestResult test : getResults().getTestResults()) {
-            tr = append(table, "tr");
-            Element td = appendWithText(tr, "td", test.getName());
-            td.setAttribute("class", test.getStatusClass());
-            appendWithText(tr, "td", test.getFormattedDuration());
-            td = appendWithText(tr, "td", test.getFormattedResultType());
-            td.setAttribute("class", test.getStatusClass());
+            parent.tr();
+            parent.td().classAttr(test.getStatusClass()).text(test.getName()).end();
+            parent.td().text(test.getFormattedDuration()).end();
+            parent.td().classAttr(test.getStatusClass()).text(test.getFormattedResultType()).end();
+            parent.end();
         }
+        parent.end();
     }
 
-    @Override protected void renderFailures(Element parent) {
+    @Override
+    protected void renderFailures(HtmlBuilder html) {
         for (TestResult test : getResults().getFailures()) {
-            Element div = append(parent, "div");
-            div.setAttribute("class", "test");
-            append(div, "a").setAttribute("name", test.getId().toString());
-            appendWithText(div, "h3", test.getName()).setAttribute("class", test.getStatusClass());
+            html.div().classAttr("test");
+            html.a().attr("name", test.getId().toString()).text("").end();
+            html.h3().classAttr(test.getStatusClass()).text(test.getName()).end();
             for (TestFailure failure : test.getFailures()) {
-                codePanelRenderer.render(failure.getStackTrace(), div);
+                codePanelRenderer.render(failure.getStackTrace(), html);
             }
+            html.end();
         }
     }
 
-    private void renderStd(Element parent, String stdString) {
-        codePanelRenderer.render(stdString, parent);
-    }
-
-    @Override protected void registerTabs() {
+    @Override
+    protected void registerTabs() {
         addFailuresTab();
-        addTab("Tests", new Action<Element>() {
-            public void execute(Element element) {
-                renderTests(element);
+        addTab("Tests", new Action<HtmlBuilder>() {
+            public void execute(HtmlBuilder html) {
+                renderTests(html);
             }
         });
-        final String stdOut = getOutputString(TestOutputEvent.Destination.StdOut);
-        if (stdOut.length() > 0) {
-            addTab("Standard output", new Action<Element>() {
-                public void execute(Element element) {
-                    renderStd(element, stdOut);
+        if (resultsProvider.hasOutput(className, TestOutputEvent.Destination.StdOut)) {
+            addTab("Standard output", new Action<HtmlBuilder>() {
+                public void execute(HtmlBuilder element) {
+                    element.span().classAttr("code");
+                    element.pre();
+                    element.text("");
+                    resultsProvider.writeOutputs(className, TestOutputEvent.Destination.StdOut, element.getWriter());
+                    element.end();
+                    element.end();
                 }
             });
         }
-        final String stdErr = getOutputString(TestOutputEvent.Destination.StdErr);
-        if (stdErr.length() > 0) {
-            addTab("Standard error", new Action<Element>() {
-                public void execute(Element element) {
-                    renderStd(element, stdErr);
+        if (resultsProvider.hasOutput(className, TestOutputEvent.Destination.StdErr)) {
+            addTab("Standard error", new Action<HtmlBuilder>() {
+                public void execute(HtmlBuilder html) {
+                    html.span().classAttr("code");
+                    html.pre();
+                    html.text("");
+                    resultsProvider.writeOutputs(className, TestOutputEvent.Destination.StdErr, html.getWriter());
+                    html.end();
+                    html.end();
                 }
             });
         }

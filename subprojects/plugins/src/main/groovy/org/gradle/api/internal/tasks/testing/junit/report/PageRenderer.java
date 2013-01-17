@@ -16,10 +16,7 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.gradle.api.Action;
-import org.gradle.reporting.DomReportRenderer;
-import org.gradle.reporting.TabbedPageRenderer;
-import org.gradle.reporting.TabsRenderer;
-import org.w3c.dom.Element;
+import org.gradle.reporting.*;
 
 abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRenderer<T> {
     private T results;
@@ -29,57 +26,50 @@ abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRe
         return results;
     }
 
-    protected abstract void renderBreadcrumbs(Element parent);
+    protected abstract void renderBreadcrumbs(HtmlBuilder parent);
 
     protected abstract void registerTabs();
 
-    protected void addTab(String title, final Action<Element> contentRenderer) {
-        tabsRenderer.add(title, new DomReportRenderer<T>() {
+    protected void addTab(String title, final Action<HtmlBuilder> contentRenderer) {
+        tabsRenderer.add(title, new AbstractHtmlReportRenderer<T>() {
             @Override
-            public void render(T model, Element parent) {
+            public void render(T model, HtmlBuilder parent) {
                 contentRenderer.execute(parent);
             }
         });
     }
 
-    protected void renderTabs(Element element) {
-        tabsRenderer.render(getModel(), element);
+    protected void renderTabs(HtmlBuilder html) {
+        tabsRenderer.render(getModel(), html);
     }
 
     protected void addFailuresTab() {
         if (!results.getFailures().isEmpty()) {
-            addTab("Failed tests", new Action<Element>() {
-                public void execute(Element element) {
+            addTab("Failed tests", new Action<HtmlBuilder>() {
+                public void execute(HtmlBuilder element) {
                     renderFailures(element);
                 }
             });
         }
     }
 
-    protected void renderFailures(Element parent) {
-        Element ul = append(parent, "ul");
-        ul.setAttribute("class", "linkList");
+    protected void renderFailures(HtmlBuilder html) {
+        html.ul().classAttr("linkList");
         for (TestResult test : results.getFailures()) {
-            Element li = append(ul, "li");
-            appendLink(li, String.format("%s.html", test.getClassResults().getName()), test.getClassResults().getSimpleName());
-            appendText(li, ".");
-            appendLink(li, String.format("%s.html#%s", test.getClassResults().getName(), test.getName()), test.getName());
+            html.li();
+                html.a().href(String.format("%s.html", test.getClassResults().getName())).text(test.getClassResults().getSimpleName()).end();
+                html.text(".");
+                html.a().href(String.format("%s.html#%s", test.getClassResults().getName(), test.getName())).text(test.getName()).end();
+            html.end();
         }
+        html.end();
     }
 
-    protected Element appendTableAndRow(Element parent) {
-        return append(append(parent, "table"), "tr");
-    }
-
-    protected Element appendCell(Element parent) {
-        return append(append(parent, "td"), "div");
-    }
-
-    protected <T extends TestResultModel> DomReportRenderer<T> withStatus(final DomReportRenderer<T> renderer) {
-        return new DomReportRenderer<T>() {
+    protected <T extends TestResultModel> AbstractHtmlReportRenderer<T> withStatus(final AbstractHtmlReportRenderer<T> renderer) {
+        return new AbstractHtmlReportRenderer<T>() {
             @Override
-            public void render(T model, Element parent) {
-                parent.setAttribute("class", model.getStatusClass());
+            public void render(T model, HtmlBuilder parent) {
+                parent.classAttr(model.getStatusClass());
                 renderer.render(model, parent);
             }
         };
@@ -96,56 +86,61 @@ abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRe
     }
 
     @Override
-    protected DomReportRenderer<T> getHeaderRenderer() {
-        return new DomReportRenderer<T>() {
+    protected AbstractHtmlReportRenderer<T> getHeaderRenderer() {
+        return new AbstractHtmlReportRenderer<T>() {
             @Override
-            public void render(T model, Element content) {
+            public void render(T model, HtmlBuilder content) {
                 PageRenderer.this.results = model;
                 renderBreadcrumbs(content);
 
                 // summary
-                Element summary = appendWithId(content, "div", "summary");
-                Element row = appendTableAndRow(summary);
-                Element group = appendCell(row);
-                group.setAttribute("class", "summaryGroup");
-                Element summaryRow = appendTableAndRow(group);
-
-                Element tests = appendCell(summaryRow);
-                tests.setAttribute("id", "tests");
-                tests.setAttribute("class", "infoBox");
-                Element div = appendWithText(tests, "div", results.getTestCount());
-                div.setAttribute("class", "counter");
-                appendWithText(tests, "p", "tests");
-
-                Element failures = appendCell(summaryRow);
-                failures.setAttribute("id", "failures");
-                failures.setAttribute("class", "infoBox");
-                div = appendWithText(failures, "div", results.getFailureCount());
-                div.setAttribute("class", "counter");
-                appendWithText(failures, "p", "failures");
-
-                Element duration = appendCell(summaryRow);
-                duration.setAttribute("id", "duration");
-                duration.setAttribute("class", "infoBox");
-                div = appendWithText(duration, "div", results.getFormattedDuration());
-                div.setAttribute("class", "counter");
-                appendWithText(duration, "p", "duration");
-
-                Element successRate = appendCell(row);
-                successRate.setAttribute("id", "successRate");
-                successRate.setAttribute("class", String.format("infoBox %s", results.getStatusClass()));
-                div = appendWithText(successRate, "div", results.getFormattedSuccessRate());
-                div.setAttribute("class", "percent");
-                appendWithText(successRate, "p", "successful");
+                content.div().attr("id", "summary");
+                        content.table();
+                                content.tr();
+                                    content.td();
+                                            content.div().classAttr("summaryGroup");
+                                                content.table();
+                                                    content.tr();
+                                                        content.td();
+                                                            content.div().classAttr("infoBox").attr("id", "tests");
+                                                                content.div().classAttr("counter").text(Integer.toString(results.getTestCount())).end();
+                                                                content.p().text("tests").end();
+                                                            content.end();
+                                                        content.end();
+                                                        content.td();
+                                                            content.div().classAttr("infoBox").attr("id", "failures");
+                                                                content.div().classAttr("counter").text(Integer.toString(results.getFailureCount())).end();
+                                                                content.p().text("failures").end();
+                                                            content.end();
+                                                        content.end();
+                                                        content.td();
+                                                            content.div().classAttr("infoBox").attr("id", "duration");
+                                                                content.div().classAttr("counter").text(results.getFormattedDuration()).end();
+                                                                content.p().text("duration").end();
+                                                            content.end();
+                                                        content.end();
+                                                    content.end();
+                                                content.end();
+                                            content.end();
+                                    content.end();
+                                    content.td();
+                                            content.div().classAttr(String.format("infoBox %s", results.getStatusClass())).attr("id", "successRate");
+                                                content.div().classAttr("percent").text(results.getFormattedSuccessRate()).end();
+                                                content.p().text("successful").end();
+                                            content.end();
+                                    content.end();
+                                content.end();
+                        content.end();
+                content.end();
             }
         };
     }
 
     @Override
-    protected DomReportRenderer<T> getContentRenderer() {
-        return new DomReportRenderer<T>() {
+    protected AbstractHtmlReportRenderer<T> getContentRenderer() {
+        return new AbstractHtmlReportRenderer<T>() {
             @Override
-            public void render(T model, Element content) {
+            public void render(T model, HtmlBuilder content) {
                 PageRenderer.this.results = model;
                 tabsRenderer.clear();
                 registerTabs();

@@ -31,7 +31,7 @@ import java.util.LinkedList;
  *
  * by Szczepan Faber, created at: 12/3/12
  */
-public class SimpleXmlWriter extends Writer {
+public class SimpleXmlWriter extends AbstractEscapingWriter {
     private enum Context {
         Outside, Text, CData, StartTag, ElementContent
     }
@@ -335,45 +335,12 @@ public class SimpleXmlWriter extends Writer {
         return false;
     }
 
-    private void writeRaw(char c) throws IOException {
+    protected void writeRaw(char c) throws IOException {
         output.write(c);
     }
 
-    private boolean isLegalCharacter(final char c) {
-        if (c == 0) {
-            return false;
-        } else if (c <= 0xD7FF) {
-            return true;
-        } else if (c < 0xE000) {
-            return false;
-        } else if (c <= 0xFFFD) {
-            return true;
-        }
-        return false;
-    }
-
-    private boolean isRestrictedCharacter(char c) {
-        if (c == 0x9 || c == 0xA || c == 0xD || c == 0x85) {
-            return false;
-        } else if (c <= 0x1F) {
-            return true;
-        } else if (c < 0x7F) {
-            return false;
-        } else if (c <= 0x9F) {
-            return true;
-        }
-        return false;
-    }
-
-    private void writeRaw(String message) throws IOException {
+    protected void writeRaw(String message) throws IOException {
         output.write(message);
-    }
-
-    private void writeXmlEncoded(char[] message, int offset, int count) throws IOException {
-        int end = offset + count;
-        for (int i = offset; i < end; i++) {
-            writeXmlEncoded(message[i]);
-        }
     }
 
     private void writeXmlAttributeEncoded(CharSequence message) throws IOException {
@@ -401,26 +368,6 @@ public class SimpleXmlWriter extends Writer {
         int len = message.length();
         for (int i = 0; i < len; i++) {
             writeXmlEncoded(message.charAt(i));
-        }
-    }
-
-    private void writeXmlEncoded(char ch) throws IOException {
-        if (ch == '<') {
-            writeRaw("&lt;");
-        } else if (ch == '>') {
-            writeRaw("&gt;");
-        } else if (ch == '&') {
-            writeRaw("&amp;");
-        } else if (ch == '"') {
-            writeRaw("&quot;");
-        } else if (!isLegalCharacter(ch)) {
-            writeRaw('?');
-        } else if (isRestrictedCharacter(ch)) {
-            writeRaw("&#x");
-            writeRaw(Integer.toHexString(ch));
-            writeRaw(";");
-        } else {
-            writeRaw(ch);
         }
     }
 }

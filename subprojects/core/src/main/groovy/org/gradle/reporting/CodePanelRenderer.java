@@ -15,14 +15,12 @@
  */
 package org.gradle.reporting;
 
-import org.w3c.dom.Element;
-
-public class CodePanelRenderer extends DomReportRenderer<String> {
+public class CodePanelRenderer extends AbstractHtmlReportRenderer<String> {
     @Override
-    public void render(String text, Element parent) {
+    public void render(String text, HtmlBuilder parent) {
         // Wrap in a <span>, to work around CSS problem in IE
-        Element span = append(parent, "span");
-        span.setAttribute("class", "code");
-        appendWithText(span, "pre", text);
+        parent.span().classAttr("code");
+        parent.pre().text(text).end();
+        parent.end();
     }
 }
