@@ -175,7 +175,7 @@ eclipse {
   classpath {
     sourceSets = []
 
-    plusConfigurations += configurations.someConfig
+    plusConfigurations << configurations.someConfig
 
     containers 'someFriendlyContainer', 'andYetAnotherContainer'
 
@@ -224,8 +224,8 @@ dependencies {
 }
 
 eclipse.classpath {
-    plusConfigurations += configurations.someConfig
-    minusConfigurations += configurations.someOtherConfig
+    plusConfigurations << configurations.someConfig
+    minusConfigurations << configurations.someOtherConfig
 }
 """
 
@@ -259,8 +259,8 @@ dependencies {
 }
 
 eclipse.classpath {
-    plusConfigurations += configurations.someConfig
-    minusConfigurations += configurations.someOtherConfig
+    plusConfigurations << configurations.someConfig
+    minusConfigurations << configurations.someOtherConfig
 }
 """
 
@@ -294,8 +294,8 @@ dependencies {
 }
 
 eclipse.classpath {
-    plusConfigurations += configurations.someConfig
-    minusConfigurations += configurations.someOtherConfig
+    plusConfigurations << configurations.someConfig
+    minusConfigurations << configurations.someOtherConfig
 }
 """
 
@@ -582,8 +582,8 @@ dependencies {
 
 eclipse {
   classpath {
-    plusConfigurations += configurations.provided
-    noExportConfigurations += configurations.provided
+    plusConfigurations << configurations.provided
+    noExportConfigurations << configurations.provided
   }
 }
 """

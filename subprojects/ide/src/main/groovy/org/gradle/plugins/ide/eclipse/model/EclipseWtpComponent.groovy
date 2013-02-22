@@ -54,13 +54,13 @@ import org.gradle.util.ConfigureUtil
  *
  *       //you can alter the wb-resource elements. sourceDirs is a ConventionProperty.
  *       //non-existing source dirs won't be added to the component file.
- *       sourceDirs += file('someExtraFolder')
+ *       sourceDirs &lt;&lt; file('someExtraFolder')
  *
  *       //you can alter the files are to be transformed into dependent-module elements:
- *       plusConfigurations += configurations.someInterestingConfiguration
+ *       plusConfigurations &lt;&lt; configurations.someInterestingConfiguration
  *
  *       //or whose files are to be excluded from dependent-module elements:
- *       minusConfigurations += configurations.anotherConfiguration
+ *       minusConfigurations &lt;&lt; configurations.anotherConfiguration
  *
  *       //you can add a wb-resource elements; mandatory keys: 'sourcePath', 'deployPath':
  *       //if sourcePath points to non-existing folder it will *not* be added.

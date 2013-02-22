@@ -61,7 +61,7 @@ idea {
         testSourceDirs += file('additionalCustomTestSources')
         excludeDirs += file('excludeMePlease')
 
-        scopes.PROVIDED.plus += configurations.compile
+        scopes.PROVIDED.plus << configurations.compile
         downloadJavadoc = true
         downloadSources = false
 
@@ -122,7 +122,7 @@ dependencies {
 
 idea {
     module {
-        scopes.COMPILE.plus += configurations.foo
+        scopes.COMPILE.plus << configurations.foo
         scopes.COMPILE.minus += [configurations.bar, configurations.baz]
     }
 }
