@@ -55,6 +55,29 @@ class PluginHandlerScriptIntegTest extends AbstractIntegrationSpec {
         executesCorrectly()
     }
 
+    def "cannot use plugin block when script target is not plugin capable"() {
+        buildFile << """
+            task foo {}
+            apply {
+                from "plugin.gradle"
+                to foo
+            }
+        """
+
+        file("plugin.gradle") << """
+            plugins {
+                apply plugin: "foo"
+            }
+        """
+
+        when:
+        fails "foo"
+
+        then:
+        errorOutput.contains("cannot have plugins applied to it")
+    }
+
+
     def void executesCorrectly() {
         succeeds "tasks"
         assert output.contains("in\nout\n") // Testing the the plugins {} block is extracted and executed before the “main” content
