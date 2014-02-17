@@ -10,4 +10,9 @@ task runtimeTests {
 
 task runtimeIntegTests {
     dependsOn { runtimeProjectTasks("integTest") }
+    if (project.hasProperty('crossVersionTestsOnly')) {
+        dependsOn {
+            project(':toolingApi').tasks.findAll { Task t -> t.name.startsWith('r') && t.name.endsWith('IntegTest') }
+        }
+    }
 }

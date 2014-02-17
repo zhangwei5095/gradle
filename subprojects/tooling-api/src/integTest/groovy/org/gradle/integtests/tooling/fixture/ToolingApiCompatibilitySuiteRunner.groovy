@@ -28,17 +28,23 @@ import org.gradle.internal.os.OperatingSystem
 import org.gradle.util.*
 
 class ToolingApiCompatibilitySuiteRunner extends AbstractCompatibilityTestRunner {
+    private static final String ONLY_CROSS_VERSIONS_SYSPROP_NAME = "org.gradle.integtest.only_cross_versions";
     private static final Map<String, ClassLoader> TEST_CLASS_LOADERS = [:]
+
+    private final boolean onlyCrossVersions
 
     ToolingApiCompatibilitySuiteRunner(Class<? extends ToolingApiSpecification> target) {
         super(target)
+        onlyCrossVersions = Boolean.getBoolean(ONLY_CROSS_VERSIONS_SYSPROP_NAME)
     }
 
     @Override
     protected void createExecutions() {
         def resolver = new ToolingApiDistributionResolver().withDefaultRepository()
         try {
-            add(new Permutation(resolver.resolve(current.version.version), current))
+            if (!onlyCrossVersions) {
+                add(new Permutation(resolver.resolve(current.version.version), current))
+            }
             previous.each {
                 if (it.toolingApiSupported) {
                     add(new Permutation(resolver.resolve(current.version.version), it))

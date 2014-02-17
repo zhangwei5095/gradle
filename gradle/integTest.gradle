@@ -66,7 +66,9 @@ integTestTasks.all { Test task ->
     reports.junitXml.destination = file("${project.testResultsDir}/$name")
 
     // use -PtestVersions=all or -PtestVersions=1.2,1.3…
-    systemProperties['org.gradle.integtest.versions'] = project.hasProperty('testVersions') ? project.testVersions : 'latest'
+    if (!task.name.startsWith('r')) {
+        systemProperties['org.gradle.integtest.versions'] = project.hasProperty('testVersions') ? project.testVersions : 'latest'
+    }
 
     if (project.hasProperty('crossVersionTestsOnly')) {
         include '**/*CrossVersion*'

@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import org.gradle.build.*
 import org.gradle.api.internal.artifacts.publish.ArchivePublishArtifact
 
@@ -20,6 +21,21 @@ dependencies {
 }
 
 useTestFixtures()
+
+task integTestSuite(type: TestReport) {
+    destinationDir = file("$buildDir/reports/integTestSuite")
+}
+
+for (String versionName : new VersionsReader().readPreviousVersions()) {
+    Task versionIntegTest = project.tasks.create('r' + versionName.replaceAll("\\.", "").replace("-milestone-", "m").replace("-rc-", "rc") + 'IntegTest', Test)
+    def defaultExecuter = project.hasProperty("defaultIntegTestExecuter") ? project.defaultIntegTestExecuter : "embedded"
+    versionIntegTest.systemProperties['org.gradle.integtest.executer'] = defaultExecuter
+    versionIntegTest.systemProperties['org.gradle.integtest.versions'] = versionName
+    versionIntegTest.systemProperties['org.gradle.integtest.only_cross_versions'] = 'true'
+
+    versionIntegTest.classpath = project.sourceSets.integTest.runtimeClasspath
+    integTestSuite.reportOn(versionIntegTest)
+}
 
 integTestTasks.all {
     dependsOn({ rootProject.getTasksByName('publishLocalArchives', true) }, ':distributions:binZip')
@@ -64,6 +80,25 @@ artifacts {
 }
 
 configurations.publishRuntime { artifacts.removeAll { it instanceof ArchivePublishArtifact && it.archiveTask == jar } }
+
+class VersionsReader {
+    public Iterable<String> readPreviousVersions() {
+        List<String> versions = new ArrayList<String>()
+        InputStream versionsStream = this.class.getResourceAsStream("/previous-versions.json")
+        Reader versionsReader
+        try {
+            versionsReader = new BufferedReader(new InputStreamReader(versionsStream))
+            for (def version : new groovy.json.JsonSlurper().parse(versionsReader)) {
+                versions.add(version.version)
+            }
+        } finally {
+            if (versionsStream != null) {
+                versionsStream.close()
+            }
+        }
+        versions
+    }
+}
 
 eclipse {
     classpath {
