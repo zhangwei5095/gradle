@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 package org.gradle.nativebinaries.toolchain.plugins
+
+import org.gradle.api.Action
 import org.gradle.api.Incubating
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -25,7 +27,9 @@ import org.gradle.internal.reflect.Instantiator
 import org.gradle.nativebinaries.toolchain.internal.ToolChainRegistryInternal
 import org.gradle.nativebinaries.plugins.NativeBinariesPlugin
 import org.gradle.nativebinaries.toolchain.Clang
+import org.gradle.nativebinaries.toolchain.internal.ToolType
 import org.gradle.nativebinaries.toolchain.internal.clang.ClangToolChain
+import org.gradle.nativebinaries.toolchain.internal.tools.DefaultTool
 import org.gradle.process.internal.ExecActionFactory
 
 import javax.inject.Inject
@@ -53,7 +57,12 @@ class ClangCompilerPlugin implements Plugin<Project> {
         modelRules.rule(new ModelRule() {
             void addToolChain(ToolChainRegistryInternal toolChainRegistry) {
                 toolChainRegistry.registerFactory(Clang, { String name ->
-                    return instantiator.newInstance(ClangToolChain, name, OperatingSystem.current(), fileResolver, execActionFactory)
+                    ClangToolChain clangToolChain = instantiator.newInstance(ClangToolChain, instantiator, name, OperatingSystem.current(), fileResolver, execActionFactory)
+                    clangToolChain.add(new DefaultTool("linker", ToolType.LINKER, "clang++"));
+                    clangToolChain.add(new DefaultTool("staticLibArchiver", ToolType.STATIC_LIB_ARCHIVER, "ar"));
+                    clangToolChain.add(new DefaultTool("cCompiler", ToolType.C_COMPILER, "clang"));
+                    clangToolChain.add(new DefaultTool("cppCompiler", ToolType.CPP_COMPILER, "clang++"));
+                    return clangToolChain
                 })
                 toolChainRegistry.registerDefaultToolChain(ClangToolChain.DEFAULT_NAME, Clang)
             }

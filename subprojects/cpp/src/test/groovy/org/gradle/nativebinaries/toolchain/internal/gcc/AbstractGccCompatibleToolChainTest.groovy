@@ -29,7 +29,7 @@ import org.gradle.nativebinaries.platform.internal.DefaultOperatingSystem
 
 import org.gradle.nativebinaries.toolchain.internal.ToolSearchResult
 import org.gradle.nativebinaries.toolchain.internal.ToolType
-import org.gradle.nativebinaries.toolchain.internal.tools.ConfigurableToolChainInternal
+
 import org.gradle.nativebinaries.toolchain.internal.tools.ToolSearchPath
 import org.gradle.process.internal.ExecActionFactory
 import org.gradle.util.Requires
@@ -113,7 +113,7 @@ class AbstractGccCompatibleToolChainTest extends Specification {
         platform.getOperatingSystem() >> DefaultOperatingSystem.TOOL_CHAIN_DEFAULT
         platform.getArchitecture() >> ArchitectureInternal.TOOL_CHAIN_DEFAULT
 
-        ConfigurableToolChainInternal configurableToolChain = newConfigurableToolChainInternal()
+        ConfigurableToolChain configurableToolChain = newConfigurableToolChain()
         then:
 
         with(toolChain.getPlatformConfiguration(platform).apply(configurableToolChain)) {
@@ -144,7 +144,7 @@ class AbstractGccCompatibleToolChainTest extends Specification {
         then:
         toolChain.select(platform).available
 
-        with(toolChain.getPlatformConfiguration(platform).apply(newConfigurableToolChainInternal())) {
+        with(toolChain.getPlatformConfiguration(platform).apply(newConfigurableToolChain())) {
             argsFor(linker) ==  [linkerArg]
             argsFor(cppCompiler) == [compilerArg]
             argsFor(getCCompiler()) == [compilerArg]
@@ -173,7 +173,7 @@ class AbstractGccCompatibleToolChainTest extends Specification {
         then:
         toolChain.select(platform).available
 
-        with(toolChain.getPlatformConfiguration(platform).apply(newConfigurableToolChainInternal())) {
+        with(toolChain.getPlatformConfiguration(platform).apply(newConfigurableToolChain())) {
             argsFor(linker) == ["-m32"]
             argsFor(cppCompiler)== ["-m32"]
             argsFor(getCCompiler()) == ["-m32"]
@@ -266,8 +266,8 @@ class AbstractGccCompatibleToolChainTest extends Specification {
     }
 
 
-    ConfigurableToolChainInternal newConfigurableToolChainInternal() {
-        ConfigurableToolChainInternal configurableToolChain = Mock(ConfigurableToolChainInternal)
+    ConfigurableToolChain newConfigurableToolChain() {
+        ConfigurableToolChain configurableToolChain = Mock(ConfigurableToolChain)
         _ * configurableToolChain.assembler >> new DefaultTool(ToolType.ASSEMBLER, "")
         _ * configurableToolChain.CCompiler>> new DefaultTool(ToolType.C_COMPILER, "")
         _ * configurableToolChain.cppCompiler >> new DefaultTool(ToolType.CPP_COMPILER, "")

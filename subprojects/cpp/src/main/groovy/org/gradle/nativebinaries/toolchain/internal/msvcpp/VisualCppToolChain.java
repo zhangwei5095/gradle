@@ -21,6 +21,7 @@ import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.tasks.compile.Compiler;
 import org.gradle.internal.jvm.Jvm;
 import org.gradle.internal.os.OperatingSystem;
+import org.gradle.internal.reflect.Instantiator;
 import org.gradle.nativebinaries.internal.BinaryToolSpec;
 import org.gradle.nativebinaries.internal.LinkerSpec;
 import org.gradle.nativebinaries.internal.StaticLibraryArchiverSpec;
@@ -29,6 +30,7 @@ import org.gradle.nativebinaries.language.c.internal.CCompileSpec;
 import org.gradle.nativebinaries.language.cpp.internal.CppCompileSpec;
 import org.gradle.nativebinaries.language.rc.internal.WindowsResourceCompileSpec;
 import org.gradle.nativebinaries.platform.Platform;
+import org.gradle.nativebinaries.toolchain.GccTool;
 import org.gradle.nativebinaries.toolchain.VisualCpp;
 import org.gradle.nativebinaries.toolchain.internal.*;
 import org.gradle.process.internal.ExecActionFactory;
@@ -56,8 +58,8 @@ public class VisualCppToolChain extends AbstractToolChain implements VisualCpp {
     private ToolChainAvailability availability;
 
     public VisualCppToolChain(String name, OperatingSystem operatingSystem, FileResolver fileResolver, ExecActionFactory execActionFactory,
-                              VisualStudioLocator visualStudioLocator, WindowsSdkLocator windowsSdkLocator) {
-        super(name, operatingSystem, fileResolver);
+                              VisualStudioLocator visualStudioLocator, WindowsSdkLocator windowsSdkLocator, Instantiator instantiator) {
+        super(GccTool.class, name, operatingSystem, fileResolver, instantiator);
         this.execActionFactory = execActionFactory;
         this.visualStudioLocator = visualStudioLocator;
         this.windowsSdkLocator = windowsSdkLocator;

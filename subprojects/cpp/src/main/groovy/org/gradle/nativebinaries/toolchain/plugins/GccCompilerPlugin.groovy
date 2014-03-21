@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 package org.gradle.nativebinaries.toolchain.plugins
+
+import org.gradle.api.Action
 import org.gradle.api.Incubating
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -22,10 +24,13 @@ import org.gradle.internal.os.OperatingSystem
 import org.gradle.model.ModelRule
 import org.gradle.model.ModelRules
 import org.gradle.internal.reflect.Instantiator
+import org.gradle.nativebinaries.toolchain.Clang
 import org.gradle.nativebinaries.toolchain.internal.ToolChainRegistryInternal
 import org.gradle.nativebinaries.plugins.NativeBinariesPlugin
 import org.gradle.nativebinaries.toolchain.Gcc
+import org.gradle.nativebinaries.toolchain.internal.ToolType
 import org.gradle.nativebinaries.toolchain.internal.gcc.GccToolChain
+import org.gradle.nativebinaries.toolchain.internal.tools.DefaultTool
 import org.gradle.process.internal.ExecActionFactory
 
 import javax.inject.Inject
@@ -53,7 +58,12 @@ class GccCompilerPlugin implements Plugin<Project> {
         modelRules.rule(new ModelRule() {
             void addGccToolChain(ToolChainRegistryInternal toolChainRegistry) {
                 toolChainRegistry.registerFactory(Gcc, { String name ->
-                    return instantiator.newInstance(GccToolChain, name, OperatingSystem.current(), fileResolver, execActionFactory)
+                    GccToolChain gccToolChain = instantiator.newInstance(GccToolChain, instantiator, name, OperatingSystem.current(), fileResolver, execActionFactory)
+                    gccToolChain.add(new DefaultTool("linker", ToolType.LINKER, "g++"));
+                    gccToolChain.add(new DefaultTool("cCompiler", ToolType.CPP_COMPILER, "g++"));
+                    gccToolChain.add(new DefaultTool("cppCompiler", ToolType.C_COMPILER, "gcc"));
+                    gccToolChain.add(new DefaultTool("staticLibArchiver", ToolType.STATIC_LIB_ARCHIVER, "ar"));
+                    return gccToolChain
                 })
                 toolChainRegistry.registerDefaultToolChain(GccToolChain.DEFAULT_NAME, Gcc)
             }

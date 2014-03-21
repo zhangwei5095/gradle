@@ -16,17 +16,24 @@
 
 package org.gradle.nativebinaries.toolchain.internal;
 
+import org.gradle.api.internal.DefaultNamedDomainObjectSet;
 import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.reporting.SingleFileReport;
 import org.gradle.internal.os.OperatingSystem;
+import org.gradle.internal.reflect.Instantiator;
+import org.gradle.nativebinaries.Tool;
+import org.gradle.nativebinaries.toolchain.GccTool;
+import org.gradle.nativebinaries.toolchain.internal.tools.GccToolInternal;
 
 import java.io.File;
 
-public abstract class AbstractToolChain implements ToolChainInternal {
+public abstract class AbstractToolChain<T extends GccTool> extends DefaultNamedDomainObjectSet<T> implements ToolChainInternal {
     private final String name;
     protected final OperatingSystem operatingSystem;
     private final FileResolver fileResolver;
 
-    protected AbstractToolChain(String name, OperatingSystem operatingSystem, FileResolver fileResolver) {
+    protected AbstractToolChain(Class<? extends T> type, String name, OperatingSystem operatingSystem, FileResolver fileResolver, Instantiator instantiator) {
+        super(type, instantiator);
         this.name = name;
         this.operatingSystem = operatingSystem;
         this.fileResolver = fileResolver;
