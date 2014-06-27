@@ -26,14 +26,14 @@ archivesBaseName = 'gradle'
 extensions.buildTypes = new BuildTypes(project)
 
 buildTypes {
-    sanityCheck "classes", "doc:checkstyleApi", "codeQuality", "docs:check"
+    sanityCheck "classes", ":docs:checkstyleApi", "codeQuality", ":docs:check"
 
     // The minimum to be run before check-in
-    preCommitBuild "doc:checkstyleApi", "docs:check", "codeQuality", "classes", "test"
-    quickCheck "doc:checkstyleApi", "docs:check", "codeQuality", "classes", "test"
+    preCommitBuild ":docs:checkstyleApi", ":docs:check", "codeQuality", "classes", "test"
+    quickCheck ":docs:checkstyleApi", ":docs:check", "codeQuality", "classes", "test"
 
     // For testing pull requests
-    pullRequestValidation "doc:checkstyleApi", "docs:check", "codeQuality", "classes"
+    pullRequestValidation ":docs:checkstyleApi", ":docs:check", "codeQuality", "classes"
 
     // A full (in-process) test
     developerBuild "check"
@@ -54,19 +54,19 @@ buildTypes {
     parallelTest "runtimeIntegTests", useIncomingDistributions: true, defaultIntegTestExecuter: "parallel"
 
     // Run the performance tests
-    performanceTest "performance:integTest", useIncomingDistributions: true
+    performanceTest ":performance:integTest", useIncomingDistributions: true
 
     // Run the performance tests
-    localPerformanceTest "performance:integTest"
+    localPerformanceTest ":performance:integTest"
 
     // Used for cross version tests on CI
     crossVersionTest "crossVersionIntegTest", useIncomingDistributions: true
 
     // Used to build production distros and smoke test them
-    packageBuild "verifyIsProductionBuildEnvironment", "clean", "buildDists", "distributions:integTest"
+    packageBuild "verifyIsProductionBuildEnvironment", "clean", "buildDists", ":distributions:integTest"
 
     // Used to build production distros and smoke test them
-    promotionBuild "verifyIsProductionBuildEnvironment", "clean", "docs:check", "buildDists", "distributions:integTest", "uploadArchives"
+    promotionBuild "verifyIsProductionBuildEnvironment", "clean", ":docs:check", "buildDists", ":distributions:integTest", "uploadArchives"
 }
 
 ext {

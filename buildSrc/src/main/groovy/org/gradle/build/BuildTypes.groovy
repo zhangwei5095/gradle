@@ -16,23 +16,13 @@
 package org.gradle.build
 
 import org.gradle.api.Project
-import org.gradle.api.GradleException
 
 class BuildTypes {
 
     private final Project project
-    private final activeNames = []
 
     BuildTypes(Project project) {
         this.project = project
-    }
-
-    List<String> getActive() {
-        new LinkedList(activeNames)
-    }
-
-    boolean isActive(String name) {
-        name in activeNames
     }
 
     def methodMissing(String name, args) {
@@ -49,28 +39,26 @@ class BuildTypes {
     private register(name, tasks, projectProperties) {
         project.task(name) {
             group = "Build Type"
+
+            project.gradle.projectsEvaluated {
+                dependsOn tasks.inject([]) { acc, val ->
+                    def taskObjects = val.startsWith(":") ? [project.tasks.getByPath(val)] : project.getTasksByName(val, true).toList()
+                    taskObjects*.shouldRunAfter(acc)
+                    acc.addAll(taskObjects)
+                    acc
+                }
+            }
+
             def abbreviation = name[0] + name[1..-1].replaceAll("[a-z]", "")
             def taskNames = project.gradle.startParameter.taskNames
-
             def usedName = taskNames.find { it in [name, abbreviation] }
             if (usedName) {
-                activeNames << name
-                def index = taskNames.indexOf(usedName)
-                taskNames.remove((int)index)
-                tasks.reverse().each {
-                    taskNames.add(index, it)
-                }
-                project.gradle.startParameter.taskNames = taskNames
                 projectProperties.each { k, v ->
                     if (!project.hasProperty(k)) {
                         project.ext."$k" = null
                     }
                     project."$k" = v
                 }
-            }
-
-            doFirst {
-                throw new GradleException("'$name' is a build type and has to be invoked directly, and its name can only be abbreviated to '$abbreviation'.")
             }
          }
     }
