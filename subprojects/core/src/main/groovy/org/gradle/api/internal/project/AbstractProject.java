@@ -45,6 +45,7 @@ import org.gradle.api.plugins.Convention;
 import org.gradle.api.plugins.ExtensionContainer;
 import org.gradle.api.plugins.PluginContainer;
 import org.gradle.api.resources.ResourceHandler;
+import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.configuration.project.ProjectConfigurationActionContainer;
@@ -59,9 +60,15 @@ import org.gradle.listener.ListenerBroadcast;
 import org.gradle.logging.LoggingManagerInternal;
 import org.gradle.logging.StandardOutputCapture;
 import org.gradle.model.dsl.internal.GroovyModelDsl;
+import org.gradle.model.internal.core.ModelAdapter;
 import org.gradle.model.internal.core.ModelPath;
+import org.gradle.model.internal.core.ModelReference;
 import org.gradle.model.internal.core.ModelType;
-import org.gradle.model.internal.core.rule.InstanceBackedModelCreator;
+import org.gradle.model.internal.core.Inputs;
+import org.gradle.model.internal.core.InstanceBackedModelCreator;
+import org.gradle.model.internal.core.ModelCreator;
+import org.gradle.model.internal.core.ModelPromise;
+import org.gradle.model.internal.core.rule.describe.ModelRuleSourceDescriptor;
 import org.gradle.model.internal.core.rule.describe.SimpleModelRuleSourceDescriptor;
 import org.gradle.model.internal.registry.ModelRegistry;
 import org.gradle.process.ExecResult;
@@ -209,25 +216,45 @@ public abstract class AbstractProject extends AbstractPluginAware implements Pro
         ));
 
         final ModelPath tasksModelPath = ModelPath.path(TaskContainerInternal.MODEL_PATH);
+        final PolymorphicDomainObjectContainerModelAdapter<Task, TaskContainer> tasksModelAdapter = new PolymorphicDomainObjectContainerModelAdapter<Task, TaskContainer>(
+                getTasks(), ModelType.of(TaskContainer.class), ModelType.of(Task.class)
+        );
 
-        modelRegistry.create(InstanceBackedModelCreator.of(
-                new ModelPath("tasks"),
-                ModelType.of(TaskContainerInternal.class),
-                new SimpleModelRuleSourceDescriptor("Project.<init>.tasks()"),
-                getTasks()
-        ));
+        modelRegistry.create(new ModelCreator() {
+            public ModelPath getPath() {
+                return tasksModelPath;
+            }
+
+            public ModelPromise getPromise() {
+                return tasksModelAdapter.asPromise();
+            }
+
+            public ModelAdapter create(Inputs inputs) {
+                return tasksModelAdapter;
+            }
+
+            public List<? extends ModelReference<?>> getInputBindings() {
+                return Collections.emptyList();
+            }
+
+            public ModelRuleSourceDescriptor getSourceDescriptor() {
+                return new SimpleModelRuleSourceDescriptor("Project.<init>.tasks()");
+            }
+        });
 
         taskContainer.all(new Action<Task>() {
             public void execute(final Task task) {
                 final String name = task.getName();
                 final ModelPath modelPath = tasksModelPath.child(name);
 
-                modelRegistry.create(InstanceBackedModelCreator.of(
-                        modelPath,
-                        ModelType.of(Task.class),
-                        new SimpleModelRuleSourceDescriptor("Project.<init>.tasks." + name + "()"),
-                        task
-                ));
+                if (modelRegistry.state(modelPath) == null) {
+                    modelRegistry.create(InstanceBackedModelCreator.of(
+                            modelPath,
+                            ModelType.of(Task.class),
+                            new SimpleModelRuleSourceDescriptor("Project.<init>.tasks." + name + "()"),
+                            task
+                    ));
+                }
             }
         });
 

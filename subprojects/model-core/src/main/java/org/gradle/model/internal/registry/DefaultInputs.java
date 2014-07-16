@@ -16,12 +16,14 @@
 
 package org.gradle.model.internal.registry;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
+import org.gradle.model.internal.core.ModelReference;
 import org.gradle.model.internal.core.ModelType;
 import org.gradle.model.internal.core.ModelView;
-import org.gradle.model.internal.core.rule.Inputs;
-import org.gradle.model.internal.core.rule.ModelRuleInput;
+import org.gradle.model.internal.core.Inputs;
+import org.gradle.model.internal.core.ModelRuleInput;
 
-import java.util.Iterator;
 import java.util.List;
 
 public class DefaultInputs implements Inputs {
@@ -47,7 +49,11 @@ public class DefaultInputs implements Inputs {
         return inputs.size();
     }
 
-    public Iterator<ModelRuleInput<?>> iterator() {
-        return inputs.iterator();
+    public List<ModelReference<?>> getReferences() {
+        return Lists.transform(inputs, new Function<ModelRuleInput<?>, ModelReference<?>>() {
+            public ModelReference<?> apply(ModelRuleInput<?> input) {
+                return input.getReference();
+            }
+        });
     }
 }

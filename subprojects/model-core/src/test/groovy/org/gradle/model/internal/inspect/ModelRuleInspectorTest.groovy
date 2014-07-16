@@ -22,7 +22,7 @@ import org.gradle.model.internal.core.ModelPath
 import org.gradle.model.internal.core.ModelReference
 import org.gradle.model.internal.core.ModelState
 import org.gradle.model.internal.core.ModelType
-import org.gradle.model.internal.core.rule.InstanceBackedModelCreator
+import org.gradle.model.internal.core.InstanceBackedModelCreator
 import org.gradle.model.internal.core.rule.describe.SimpleModelRuleSourceDescriptor
 import org.gradle.model.internal.registry.DefaultModelRegistry
 import org.gradle.model.internal.registry.ModelRegistry

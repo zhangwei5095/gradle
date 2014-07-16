@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
+package org.gradle.model.internal.core;
 
 import org.gradle.internal.Factories;
 import org.gradle.internal.Factory;
-import org.gradle.model.internal.core.*;
 import org.gradle.model.internal.core.rule.describe.ModelRuleSourceDescriptor;
 
 import java.util.Collections;
@@ -29,6 +28,7 @@ public class InstanceBackedModelCreator implements ModelCreator {
     private final ModelPath path;
     private final ModelPromise promise;
     private final ModelRuleSourceDescriptor descriptor;
+    private final List<ModelReference<?>> inputBindings;
     private final ModelAdapter adapter;
 
     public static <T> ModelCreator of(ModelPath path, ModelType<T> type, ModelRuleSourceDescriptor sourceDescriptor, T instance) {
@@ -36,13 +36,18 @@ public class InstanceBackedModelCreator implements ModelCreator {
     }
 
     public static <T> ModelCreator of(ModelPath path, ModelType<T> type, ModelRuleSourceDescriptor sourceDescriptor, Factory<? extends T> factory) {
-        return new InstanceBackedModelCreator(path, new SingleTypeModelPromise(type), sourceDescriptor, InstanceModelAdapter.of(type, factory));
+        return new InstanceBackedModelCreator(path, new SingleTypeModelPromise(type), sourceDescriptor, Collections.<ModelReference<?>>emptyList(), InstanceModelAdapter.of(type, factory));
     }
 
-    private InstanceBackedModelCreator(ModelPath path, ModelPromise promise, ModelRuleSourceDescriptor descriptor, ModelAdapter adapter) {
+    public static <T> ModelCreator of(ModelPath path, ModelType<T> type, ModelRuleSourceDescriptor sourceDescriptor, List<ModelReference<?>> inputBindings, Factory<? extends T> factory) {
+        return new InstanceBackedModelCreator(path, new SingleTypeModelPromise(type), sourceDescriptor, inputBindings, InstanceModelAdapter.of(type, factory));
+    }
+
+    private InstanceBackedModelCreator(ModelPath path, ModelPromise promise, ModelRuleSourceDescriptor descriptor, List<ModelReference<?>> inputBindings, ModelAdapter adapter) {
         this.path = path;
         this.promise = promise;
         this.descriptor = descriptor;
+        this.inputBindings = inputBindings;
         this.adapter = adapter;
     }
 
@@ -59,10 +64,11 @@ public class InstanceBackedModelCreator implements ModelCreator {
     }
 
     public List<? extends ModelReference<?>> getInputBindings() {
-        return Collections.emptyList();
+        return inputBindings;
     }
 
     public ModelRuleSourceDescriptor getSourceDescriptor() {
         return descriptor;
     }
+
 }

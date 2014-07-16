@@ -14,12 +14,22 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
+package org.gradle.model.internal.core;
 
-import org.gradle.model.internal.core.ModelPath;
+import org.gradle.model.internal.core.rule.describe.ModelRuleSourceDescriptor;
 
-public interface ModelCreationListener {
+import java.util.List;
 
-    boolean onCreate(ModelPath path, ModelPromise promise);
+public interface ModelCreator {
+
+    ModelPath getPath();
+
+    ModelPromise getPromise();
+
+    ModelAdapter create(Inputs inputs);
+
+    List<? extends ModelReference<?>> getInputBindings();
+
+    ModelRuleSourceDescriptor getSourceDescriptor();
 
 }

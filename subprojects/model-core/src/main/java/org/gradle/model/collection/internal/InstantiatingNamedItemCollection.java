@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
+package org.gradle.model.collection.internal;
 
-import org.gradle.model.internal.core.ModelType;
-import org.gradle.model.internal.core.ModelView;
-
-public interface Inputs extends Iterable<ModelRuleInput<?>> {
-
-    <T> ModelView<? extends T> get(int i, ModelType<T> type);
-
-    int size();
-
+public interface InstantiatingNamedItemCollection {
 }

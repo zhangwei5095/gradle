@@ -27,7 +27,6 @@ allprojects {
                     try {
                         ant.classycleDependencyCheck(reportFile: reportFile, failOnUnwantedDependencies: true, mergeInnerClasses: true,
                                 """
-                        show allResults
                         check absenceOfPackageCycles > 1 in org.gradle.*
                     """
                         ) {

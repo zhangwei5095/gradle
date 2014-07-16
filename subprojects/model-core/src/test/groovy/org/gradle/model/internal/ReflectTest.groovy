@@ -14,14 +14,27 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
+package org.gradle.model.internal
 
-import org.gradle.model.internal.core.ModelType;
+import com.google.common.reflect.TypeToken
+import spock.lang.Specification
 
-public interface ModelPromise {
+class ReflectTest extends Specification {
 
-    <T> boolean asWritable(ModelType<T> type);
+    static class Thing {
+        public <T> void generic(List<T> thing) {
 
-    <T> boolean asReadOnly(ModelType<T> type);
+        }
 
+        public void list(List<String> strings) {
+
+        }
+    }
+
+    def "foo"() {
+        def type = TypeToken.of(Thing.getDeclaredMethod("generic", List).genericParameterTypes[0])
+        expect:
+        type.
+        println type
+    }
 }

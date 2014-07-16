@@ -14,21 +14,27 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
+package org.gradle.model.internal.core;
 
-import org.gradle.model.internal.core.ModelReference;
-import org.gradle.model.internal.core.rule.describe.ModelRuleSourceDescriptor;
+public class InstanceModelView<T> implements ModelView<T> {
 
-import java.util.List;
+    private final ModelType<T> type;
+    private final T instance;
 
-public interface ModelMutator<T> {
+    public InstanceModelView(ModelType<T> type, T instance) {
+        this.type = type;
+        this.instance = instance;
+    }
 
-    ModelReference<T> getReference();
+    public ModelType<T> getType() {
+        return type;
+    }
 
-    void mutate(T object, Inputs inputs);
+    public T getInstance() {
+        return instance;
+    }
 
-    List<? extends ModelReference<?>> getInputBindings();
+    public void close() {
 
-    ModelRuleSourceDescriptor getSourceDescriptor();
-
+    }
 }

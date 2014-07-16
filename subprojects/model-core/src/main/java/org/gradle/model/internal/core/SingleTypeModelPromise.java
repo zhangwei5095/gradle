@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.model.internal.core.rule;
-
-import org.gradle.model.internal.core.ModelType;
+package org.gradle.model.internal.core;
 
 public class SingleTypeModelPromise implements ModelPromise {
 

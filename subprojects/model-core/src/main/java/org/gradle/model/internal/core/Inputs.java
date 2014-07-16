@@ -16,19 +16,14 @@
 
 package org.gradle.model.internal.core;
 
-import org.gradle.api.Nullable;
-import org.gradle.model.internal.core.rule.describe.ModelRuleSourceDescriptor;
+import java.util.List;
 
-public interface ModelAdapter {
+public interface Inputs {
 
-    @Nullable
-        // if the model can't be viewed as this type
-    <T> ModelView<? extends T> asWritable(ModelReference<T> reference, ModelRuleSourceDescriptor sourceDescriptor, Inputs inputs, ModelRuleRegistrar modelRegistry);
+    <T> ModelView<? extends T> get(int i, ModelType<T> type);
 
-    @Nullable
-        // if the model can't be viewed as this type
-    <T> ModelView<? extends T> asReadOnly(ModelType<T> type);
+    int size();
 
-    // TODO some kind of description of the model item?
+    List<ModelReference<?>> getReferences();
 
 }
