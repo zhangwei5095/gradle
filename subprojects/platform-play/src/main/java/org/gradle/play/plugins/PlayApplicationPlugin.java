@@ -19,10 +19,12 @@ import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.model.RuleSource;
-import org.gradle.platform.base.ComponentType;
-import org.gradle.platform.base.ComponentTypeBuilder;
+import org.gradle.model.collection.CollectionBuilder;
+import org.gradle.platform.base.*;
+import org.gradle.play.PlayApplicationBinarySpec;
 import org.gradle.play.PlayApplicationSpec;
 import org.gradle.play.internal.DefaultPlayApplicationSpec;
+import org.gradle.play.internal.DefaultPlayApplicationBinarySpec;
 
 /**
  * Plugin for Play Framework component support.
@@ -33,6 +35,7 @@ import org.gradle.play.internal.DefaultPlayApplicationSpec;
 public class PlayApplicationPlugin implements Plugin<ProjectInternal> {
 
     public void apply(ProjectInternal project) {
+
     }
 
     /**
@@ -45,5 +48,16 @@ public class PlayApplicationPlugin implements Plugin<ProjectInternal> {
         void register(ComponentTypeBuilder<PlayApplicationSpec> builder) {
             builder.defaultImplementation(DefaultPlayApplicationSpec.class);
         }
+
+        @BinaryType
+        void registerApplication(BinaryTypeBuilder<PlayApplicationBinarySpec> builder) {
+            builder.defaultImplementation(DefaultPlayApplicationBinarySpec.class);
+        }
+
+        @ComponentBinaries
+        void createBinaries(CollectionBuilder<PlayApplicationBinarySpec> binaries, PlayApplicationSpec componentSpec){
+            binaries.create(componentSpec.getName() + "Binary");
+        }
+
     }
 }

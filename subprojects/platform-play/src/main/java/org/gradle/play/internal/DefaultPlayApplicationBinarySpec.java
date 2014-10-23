@@ -16,7 +16,8 @@
 
 package org.gradle.play.internal;
 
+import org.gradle.platform.base.binary.BaseBinarySpec;
 import org.gradle.play.PlayApplicationBinarySpec;
 
-public class DefaultPlayApplicationBinarySpec implements PlayApplicationBinarySpec {
+public class DefaultPlayApplicationBinarySpec extends BaseBinarySpec implements PlayApplicationBinarySpec {
 }
