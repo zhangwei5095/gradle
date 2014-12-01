@@ -92,5 +92,9 @@ class TestFileTree extends AbstractFileTree {
         }
         this
     }
+
+    File getContainerFile() {
+        return null
+    }
 }
 

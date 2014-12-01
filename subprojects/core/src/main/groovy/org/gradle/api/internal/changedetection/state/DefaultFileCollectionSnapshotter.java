@@ -17,6 +17,8 @@
 package org.gradle.api.internal.changedetection.state;
 
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.file.AbstractFileTree;
+import org.gradle.api.internal.file.CompositeFileCollection;
 import org.gradle.api.internal.file.collections.SimpleFileCollection;
 import org.gradle.messaging.serialize.SerializerRegistry;
 import org.gradle.util.ChangeListener;
@@ -43,11 +45,25 @@ public class DefaultFileCollectionSnapshotter implements FileCollectionSnapshott
         return new FileCollectionSnapshotImpl(new HashMap<String, IncrementalFileSnapshot>());
     }
 
+    private final static boolean ZIP_HACK = System.getProperty("hack.zip") != null;
+    private static int zipCounter = 0;
+
+    static {
+        System.out.println("*** Zip hack enabled: " + ZIP_HACK);
+    }
+
     public FileCollectionSnapshot snapshot(FileCollection input) {
-        final Set<File> files = input.getAsFileTree().getFiles();
+        final Set<File> files;
+        if (ZIP_HACK) {
+            files = getFilesSmartly(input);
+        } else {
+            files = input.getAsFileTree().getFiles();
+        }
+
         if (files.isEmpty()) {
             return new FileCollectionSnapshotImpl(Collections.<String, IncrementalFileSnapshot>emptyMap());
         }
+
         final Map<String, IncrementalFileSnapshot> snapshots = new HashMap<String, IncrementalFileSnapshot>();
         cacheAccess.useCache("Create file snapshot", new Runnable() {
             public void run() {
@@ -63,6 +79,25 @@ public class DefaultFileCollectionSnapshotter implements FileCollectionSnapshott
             }
         });
         return new FileCollectionSnapshotImpl(snapshots);
+    }
+
+    private Set<File> getFilesSmartly(FileCollection input) {
+        final Set<File> files = new HashSet<File>();
+        if (input instanceof CompositeFileCollection) {
+            CompositeFileCollection c = (CompositeFileCollection) input;
+            for (FileCollection f : c.getSourceCollections()) {
+                if (f instanceof AbstractFileTree) {
+                    File container = ((AbstractFileTree) f).getContainerFile();
+                    if (container != null) {
+                        System.out.println("*** " + ++zipCounter + " Using container file" + container);
+                        files.add(container);
+                    }
+                } else {
+                    files.addAll(f.getAsFileTree().getFiles());
+                }
+            }
+        }
+        return files;
     }
 
     static interface IncrementalFileSnapshot {

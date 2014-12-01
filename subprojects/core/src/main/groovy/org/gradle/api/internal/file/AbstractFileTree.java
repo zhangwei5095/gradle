@@ -17,6 +17,7 @@ package org.gradle.api.internal.file;
 
 import groovy.lang.Closure;
 import org.codehaus.groovy.runtime.DefaultGroovyMethods;
+import org.gradle.api.Nullable;
 import org.gradle.api.file.*;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.TaskDependency;
@@ -148,6 +149,13 @@ public abstract class AbstractFileTree extends AbstractFileCollection implements
             });
             return this;
         }
+
+        @Nullable
+        @Override
+        public File getContainerFile() {
+            return fileTree.getContainerFile();
+        }
     }
 
+    public abstract @Nullable File getContainerFile();
 }

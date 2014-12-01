@@ -16,9 +16,11 @@
 package org.gradle.api.internal.file.collections;
 
 import org.gradle.api.Buildable;
+import org.gradle.api.Nullable;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileVisitor;
 import org.gradle.api.internal.file.AbstractFileTree;
+import org.gradle.api.internal.file.archive.ZipFileTree;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.api.tasks.util.PatternFilterable;
 
@@ -90,6 +92,15 @@ public class FileTreeAdapter extends AbstractFileTree implements FileCollectionC
             return new FileTreeAdapter(filterableTree.filter(patterns));
         }
         return super.matching(patterns);
+    }
+
+    @Nullable
+    @Override
+    public File getContainerFile() {
+        if (tree instanceof ZipFileTree) {
+            return ((ZipFileTree) tree).getZipFile();
+        }
+        return null;
     }
 
     public FileTree visit(FileVisitor visitor) {

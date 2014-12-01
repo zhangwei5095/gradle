@@ -164,4 +164,8 @@ public class ZipFileTree implements MinimalFileTree, FileSystemMirroringFileTree
             return unixMode;
         }
     }
+
+    public File getZipFile() {
+        return zipFile;
+    }
 }
