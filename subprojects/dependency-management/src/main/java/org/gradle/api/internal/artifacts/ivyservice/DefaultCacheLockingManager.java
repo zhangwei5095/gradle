@@ -33,7 +33,7 @@ public class DefaultCacheLockingManager implements CacheLockingManager, Closeabl
 
     public static final VersionNumber CACHE_LAYOUT_VERSION = CacheLayout.META_DATA.getVersion();
 
-    private final PersistentCache cache;
+    private final PersistentCache cache; private final CacheStats stats = new CacheStats();
 
     public DefaultCacheLockingManager(CacheRepository cacheRepository) {
         cache = cacheRepository
@@ -45,6 +45,7 @@ public class DefaultCacheLockingManager implements CacheLockingManager, Closeabl
     }
 
     public void close() {
+        System.out.println(stats.printStats());
         cache.close();
     }
 
@@ -57,11 +58,11 @@ public class DefaultCacheLockingManager implements CacheLockingManager, Closeabl
     }
 
     public <T> T useCache(String operationDisplayName, Factory<? extends T> action) {
-        return cache.useCache(operationDisplayName, action);
+        return cache.useCache(operationDisplayName, stats.useCache(action));
     }
 
     public void useCache(String operationDisplayName, Runnable action) {
-        cache.useCache(operationDisplayName, action);
+        cache.useCache(operationDisplayName, stats.useCache(action));
     }
 
     public <T> T longRunningOperation(String operationDisplayName, Factory<? extends T> action) {
