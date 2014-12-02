@@ -36,6 +36,8 @@ import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.Interna
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ModuleVersionSelection;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ResolutionResultBuilder;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.VersionSelectionReasons;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.internal.component.local.model.DslOriginDependencyMetaData;
 import org.gradle.internal.component.model.*;
 import org.gradle.internal.resolve.ModuleVersionResolveException;
@@ -44,13 +46,12 @@ import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver;
 import org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver;
 import org.gradle.internal.resolve.resolver.ModuleToComponentResolver;
 import org.gradle.internal.resolve.result.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.gradle.util.Clock;
 
 import java.util.*;
 
 public class DependencyGraphBuilder {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DependencyGraphBuilder.class);
+    private static final Logger LOGGER = Logging.getLogger(DependencyGraphBuilder.class);
     private final DependencyToConfigurationResolver dependencyToConfigurationResolver;
     private final ConflictHandler conflictHandler;
     private final ModuleToComponentResolver moduleResolver;
@@ -75,11 +76,15 @@ public class DependencyGraphBuilder {
     public void resolve(ConfigurationInternal configuration,
                         ResolutionResultBuilder newModelBuilder,
                         ResolvedConfigurationBuilder oldModelBuilder) throws ResolveException {
+        Clock clock = new Clock();
         DependencyGraphVisitor oldModelVisitor = new ResolvedConfigurationDependencyGraphVisitor(oldModelBuilder, artifactResolver);
         DependencyGraphVisitor newModelVisitor = new ResolutionResultDependencyGraphVisitor(newModelBuilder);
         DependencyGraphVisitor modelVisitor = new CompositeDependencyGraphVisitor(oldModelVisitor, newModelVisitor);
 
         resolveDependencyGraph(configuration, modelVisitor);
+        if (clock.getTimeInMs() > 1000) {
+            LOGGER.lifecycle("Resolved configuration {} in {}", configuration.getPath(), clock.getTime());
+        }
     }
 
     private void resolveDependencyGraph(ConfigurationInternal configuration, DependencyGraphVisitor modelVisitor) {
