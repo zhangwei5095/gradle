@@ -21,6 +21,7 @@ import org.gradle.api.internal.tasks.TaskExecutionContext;
 import org.gradle.api.internal.tasks.TaskStateInternal;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
+import org.gradle.util.Clock;
 
 /**
  * A {@link TaskExecuter} which skips tasks whose source file collection is empty.
@@ -34,10 +35,19 @@ public class SkipEmptySourceFilesTaskExecuter implements TaskExecuter {
     }
 
     public void execute(TaskInternal task, TaskStateInternal state, TaskExecutionContext context) {
-        if (task.getInputs().getHasSourceFiles() && task.getInputs().getSourceFiles().isEmpty()) {
-            LOGGER.info("Skipping {} as it has no source files.", task);
-            state.upToDate();
-            return;
+        Clock clock = new Clock();
+        try {
+            if (task.getInputs().getHasSourceFiles() && task.getInputs().getSourceFiles().isEmpty()) {
+                LOGGER.info("Skipping {} as it has no source files.", task);
+                state.upToDate();
+                return;
+            }
+        } finally {
+            if (clock.getTimeInMs() > 1000) {
+                LOGGER.lifecycle("{} - source files calculation took more than a second: {}", task.getPath(), clock.getTime());
+            } else {
+                LOGGER.lifecycle("{} - source files calculation took {}", task.getPath(), clock.getTime());
+            }
         }
         executer.execute(task, state, context);
     }
