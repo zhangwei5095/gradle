@@ -19,6 +19,7 @@ package org.gradle.configuration.project;
 import org.gradle.api.Action;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.tasks.TaskContainerInternal;
+import org.gradle.model.internal.registry.ModelRegistry;
 import org.gradle.model.internal.type.ModelType;
 
 /**
@@ -27,7 +28,9 @@ import org.gradle.model.internal.type.ModelType;
 public class TaskModelRealizingConfigurationAction implements Action<ProjectInternal> {
 
     public void execute(ProjectInternal projectInternal) {
-        projectInternal.getModelRegistry().get(TaskContainerInternal.MODEL_PATH, ModelType.UNTYPED);
+        ModelRegistry modelRegistry = projectInternal.getModelRegistry();
+        modelRegistry.get(TaskContainerInternal.MODEL_PATH, ModelType.UNTYPED);
+        return;
     }
 
 }

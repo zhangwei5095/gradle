@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package org.gradle.launcher.daemon.testing;
+package org.gradle.integtests.fixtures.daemon;
+
+import org.gradle.launcher.daemon.testing.DaemonFixture;
 
 import java.util.List;
 

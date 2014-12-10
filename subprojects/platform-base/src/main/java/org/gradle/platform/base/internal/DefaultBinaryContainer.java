@@ -16,12 +16,20 @@
 package org.gradle.platform.base.internal;
 
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.model.internal.ModelScrubbable;
 import org.gradle.platform.base.BinaryContainer;
 import org.gradle.platform.base.BinarySpec;
 import org.gradle.platform.base.internal.rules.RuleAwarePolymorphicDomainObjectContainer;
 
-public class DefaultBinaryContainer extends RuleAwarePolymorphicDomainObjectContainer<BinarySpec> implements BinaryContainer {
+public class DefaultBinaryContainer extends RuleAwarePolymorphicDomainObjectContainer<BinarySpec> implements BinaryContainer, ModelScrubbable {
     public DefaultBinaryContainer(Instantiator instantiator) {
         super(BinarySpec.class, instantiator);
+    }
+
+    @Override
+    public void scrubTasks() {
+        for (BinarySpec binarySpec : this) {
+            binarySpec.getTasks().clear();
+        }
     }
 }

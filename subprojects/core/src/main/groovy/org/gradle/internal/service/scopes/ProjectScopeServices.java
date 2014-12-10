@@ -146,7 +146,7 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
     }
 
     protected ModelRegistry createModelRegistry() {
-        return new DefaultModelRegistry();
+        return new DefaultModelRegistry(project.getPath());
     }
 
     protected ScriptHandler createScriptHandler() {

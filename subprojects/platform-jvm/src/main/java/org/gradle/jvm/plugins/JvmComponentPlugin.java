@@ -17,6 +17,7 @@ package org.gradle.jvm.plugins;
 
 import org.apache.commons.lang.StringUtils;
 import org.gradle.api.*;
+import org.gradle.api.internal.tasks.TaskContainerInternal;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.service.ServiceRegistry;
@@ -46,6 +47,7 @@ import org.gradle.platform.base.internal.DefaultBinaryNamingSchemeBuilder;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * Base plugin for JVM component support. Applies the {@link org.gradle.language.base.plugins.ComponentModelBasePlugin}. Registers the {@link org.gradle.jvm.JvmLibrarySpec} library type for
@@ -53,6 +55,8 @@ import java.util.List;
  */
 @Incubating
 public class JvmComponentPlugin implements Plugin<Project> {
+
+    private static final boolean USE_PLACEHOLDER_TASK = Boolean.getBoolean("org.gradle.model.placeholders");
 
     public void apply(final Project project) {
         project.getPluginManager().apply(ComponentModelBasePlugin.class);
@@ -150,25 +154,34 @@ public class JvmComponentPlugin implements Plugin<Project> {
         }
 
         @Mutate
-        public void createTasks(TaskContainer tasks, BinaryContainer binaries) {
-            for (JarBinarySpecInternal projectJarBinary : binaries.withType(JarBinarySpecInternal.class)) {
-                Task jarTask = createJarTask(tasks, projectJarBinary);
-                projectJarBinary.builtBy(jarTask);
-                projectJarBinary.getTasks().add(jarTask);
+        public void createTasks(final TaskContainer tasks, BinaryContainer binaries) {
+            for (final JarBinarySpecInternal projectJarBinary : binaries.withType(JarBinarySpecInternal.class)) {
+                final String taskName = "create" + StringUtils.capitalize(projectJarBinary.getName());
+                ((TaskContainerInternal) tasks).addPlaceholderAction(taskName, new Runnable() {
+                    @Override
+                    public void run() {
+                        Jar jar = tasks.create(taskName, Jar.class);
+                        jar.setDescription(String.format("Creates the binary file for %s.", projectJarBinary));
+                        jar.from(projectJarBinary.getClassesDir());
+                        jar.from(projectJarBinary.getResourcesDir());
+
+                        jar.setDestinationDir(projectJarBinary.getJarFile().getParentFile());
+                        jar.setArchiveName(projectJarBinary.getJarFile().getName());
+                    }
+                });
+
+                projectJarBinary.builtBy(new Callable<Task>() {
+                    @Override
+                    public Task call() throws Exception {
+                        return tasks.getByName(taskName);
+                    }
+                });
+
+                if (!USE_PLACEHOLDER_TASK) {
+                    tasks.getByName(taskName);
+                }
+                //projectJarBinary.getTasks().add(jarTask);
             }
-        }
-
-        private Task createJarTask(TaskContainer tasks, JarBinarySpecInternal binary) {
-            String taskName = "create" + StringUtils.capitalize(binary.getName());
-            Jar jar = tasks.create(taskName, Jar.class);
-            jar.setDescription(String.format("Creates the binary file for %s.", binary));
-            jar.from(binary.getClassesDir());
-            jar.from(binary.getResourcesDir());
-
-            jar.setDestinationDir(binary.getJarFile().getParentFile());
-            jar.setArchiveName(binary.getJarFile().getName());
-
-            return jar;
         }
 
         private String createBinaryName(JvmLibrarySpec jvmLibrary, BinaryNamingSchemeBuilder namingSchemeBuilder, List<JavaPlatform> selectedPlatforms, JavaPlatform platform) {

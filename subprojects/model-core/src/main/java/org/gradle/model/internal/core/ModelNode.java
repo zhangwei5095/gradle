@@ -89,6 +89,11 @@ public class ModelNode {
         return links.remove(name);
     }
 
+    @Nullable
+    public Object getPrivateData() {
+        return privateData;
+    }
+
     public <T> T getPrivateData(ModelType<T> type) {
         if (privateData == null) {
             return null;

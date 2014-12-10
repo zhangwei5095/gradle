@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.launcher.daemon.testing
+package org.gradle.integtests.fixtures.daemon
 
 import org.gradle.internal.nativeintegration.services.NativeServices
 import org.gradle.internal.service.ServiceRegistryBuilder
@@ -22,6 +22,9 @@ import org.gradle.internal.service.scopes.GlobalScopeServices
 import org.gradle.launcher.daemon.client.DaemonClientGlobalServices
 import org.gradle.launcher.daemon.registry.DaemonRegistry
 import org.gradle.launcher.daemon.registry.DaemonRegistryServices
+import org.gradle.launcher.daemon.testing.DaemonFixture
+import org.gradle.launcher.daemon.testing.LegacyDaemon
+import org.gradle.launcher.daemon.testing.TestableDaemon
 import org.gradle.logging.LoggingServiceRegistry
 import org.gradle.util.GradleVersion
 

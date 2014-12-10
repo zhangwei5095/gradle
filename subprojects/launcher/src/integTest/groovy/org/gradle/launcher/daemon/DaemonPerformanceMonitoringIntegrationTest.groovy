@@ -18,6 +18,8 @@
 
 package org.gradle.launcher.daemon
 
+import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
+
 class DaemonPerformanceMonitoringIntegrationTest extends DaemonIntegrationSpec {
 
     def setup() {

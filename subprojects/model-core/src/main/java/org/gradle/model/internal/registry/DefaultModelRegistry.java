@@ -27,6 +27,7 @@ import org.gradle.internal.Actions;
 import org.gradle.internal.Transformers;
 import org.gradle.model.InvalidModelRuleException;
 import org.gradle.model.ModelRuleBindingException;
+import org.gradle.model.internal.ModelScrubbable;
 import org.gradle.model.internal.core.*;
 import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
 import org.gradle.model.internal.report.AmbiguousBindingReporter;
@@ -39,6 +40,8 @@ import java.util.*;
 @NotThreadSafe
 public class DefaultModelRegistry implements ModelRegistry {
 
+    private static final Map<String, ModelGraph> CACHE = Maps.newHashMap();
+
     /*
                 Things we aren't doing and should:
 
@@ -50,11 +53,45 @@ public class DefaultModelRegistry implements ModelRegistry {
                 - Detecting a rule trying to bind the same element to mutate and to read
 
              */
-    private final ModelGraph modelGraph = new ModelGraph(new Action<ModelNode>() {
-        public void execute(ModelNode modelNode) {
-            notifyCreationListeners(modelNode.getCreationDescriptor(), modelNode.getCreationPath(), modelNode.getPromise());
+    private final ModelGraph modelGraph;
+
+    public DefaultModelRegistry() {
+        this("key");
+    }
+
+    public DefaultModelRegistry(String key) {
+        ModelGraph cached = CACHE.get(key);
+        boolean reuseMode = Boolean.getBoolean("org.gradle.model.reuse");
+        if (reuseMode && cached != null) {
+            this.modelGraph = cached;
+            scrubTasks(modelGraph);
+            this.reusing = true;
+            System.out.println("reusing model for " + key);
+        } else {
+            this.modelGraph = new ModelGraph(new Action<ModelNode>() {
+                public void execute(ModelNode modelNode) {
+                    notifyCreationListeners(modelNode.getCreationDescriptor(), modelNode.getCreationPath(), modelNode.getPromise());
+                }
+            });
+            this.reusing = false;
+
+            if (reuseMode) {
+                CACHE.put(key, modelGraph);
+            }
         }
-    });
+    }
+
+    private void scrubTasks(ModelGraph modelGraph) {
+        modelGraph.remove(ModelPath.path("tasks"));
+        for (ModelNode modelNode : modelGraph.getFlattened().values()) {
+            Object privateData = modelNode.getPrivateData();
+            if (privateData != null && privateData instanceof ModelScrubbable) {
+                ((ModelScrubbable) privateData).scrubTasks();
+            }
+        }
+    }
+
+    private final boolean reusing;
 
     private final Map<ModelPath, BoundModelCreator> creations = Maps.newHashMap();
     private final Multimap<ModelPath, BoundModelMutator<?>> mutators = ArrayListMultimap.create();
@@ -77,6 +114,11 @@ public class DefaultModelRegistry implements ModelRegistry {
 
     public void create(ModelCreator creator) {
         ModelPath path = creator.getPath();
+
+        if (reusing && !path.toString().startsWith("tasks")) {
+            return;
+        }
+
         if (path.getDepth() > 1) {
             throw new IllegalStateException("Creator at path " + path + " not supported, must be top level");
         }
@@ -150,6 +192,9 @@ public class DefaultModelRegistry implements ModelRegistry {
             public void execute(RuleBinder<T> ruleBinder) {
                 BoundModelMutator<T> boundMutator = new BoundModelMutator<T>(mutator, ruleBinder.getSubjectBinding(), ruleBinder.getInputBindings());
                 ModelPath path = boundMutator.getSubject().getPath();
+                if (reusing && !path.toString().startsWith("tasks")) {
+                    return;
+                }
                 mutators.put(path, boundMutator);
             }
         });

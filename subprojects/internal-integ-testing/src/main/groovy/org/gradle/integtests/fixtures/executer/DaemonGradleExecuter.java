@@ -39,7 +39,7 @@ public class DaemonGradleExecuter extends ForkingGradleExecuter {
 
         if(!isQuiet() && isAllowExtraLogging()) {
             if (!containsAny(args, asList("-i", "--info", "-d", "--debug", "-q", "--quiet"))) {
-                args.add(0, "-i");
+//                args.add(0, "-i");
             }
         }
 

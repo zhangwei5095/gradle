@@ -14,26 +14,10 @@
  * limitations under the License.
  */
 
-/*
- * The model management core.
- */
-apply plugin: "groovy"
+package org.gradle.model.internal;
 
-dependencies {
-    compile libraries.slf4j_api
-    compile project(':baseServicesGroovy')
-    compile libraries.commons_lang
-    compile libraries.jcip
+public interface ModelScrubbable {
 
-    testCompile libraries.groovy
+    public void scrubTasks();
 
-    integTestCompile project(":core")
-    integTestCompile project(":languageJava")
-
-    testFixturesCompile project(":internalTesting")
-    testFixturesCompile project(":core")
 }
-
-useTestFixtures()
-useClassycle()
-strictCompile()
