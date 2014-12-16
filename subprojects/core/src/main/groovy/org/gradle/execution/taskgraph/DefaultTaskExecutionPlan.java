@@ -588,11 +588,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
 
     private boolean detectIsParallelizable(TaskInternal task) {
         if (isAnnotationPresent(task.getClass())) {
-            if (task.isHasCustomActions()) {
-                LOGGER.info("Unable to parallelize task " + task.getPath() + " due to presence of custom actions (e.g. doFirst()/doLast())");
-            } else {
-                return true;
-            }
+            return true;
         }
 
         return false;
