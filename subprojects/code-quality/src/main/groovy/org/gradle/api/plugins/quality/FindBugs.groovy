@@ -214,8 +214,8 @@ class FindBugs extends SourceTask implements VerificationTask, Reporting<FindBug
         FindBugsSpec spec = generateSpec()
         FindBugsWorkerManager manager = new FindBugsWorkerManager()
 
-        logging.captureStandardOutput(LogLevel.DEBUG)
-        logging.captureStandardError(LogLevel.DEBUG)
+        logging.captureStandardOutput(LogLevel.LIFECYCLE)
+        logging.captureStandardError(LogLevel.LIFECYCLE)
 
         FindBugsResult result = manager.runWorker(getProject().getProjectDir(), workerProcessBuilderFactory, getFindbugsClasspath(), spec)
         evaluateResult(result);

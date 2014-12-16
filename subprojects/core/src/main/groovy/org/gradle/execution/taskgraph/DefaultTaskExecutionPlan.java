@@ -44,10 +44,13 @@ import org.gradle.util.TextUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.lang.annotation.Annotation;
 import java.util.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static java.util.Arrays.asList;
 
 /**
  * A reusable implementation of TaskExecutionPlan. The {@link #addToTaskGraph(java.util.Collection)} and {@link #clear()} methods are NOT threadsafe, and callers must synchronize access to these
@@ -584,7 +587,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
     }
 
     private boolean detectIsParallelizable(TaskInternal task) {
-        if (task.getClass().isAnnotationPresent(ParallelizableTask.class)) {
+        if (isAnnotationPresent(task.getClass())) {
             if (task.isHasCustomActions()) {
                 LOGGER.info("Unable to parallelize task " + task.getPath() + " due to presence of custom actions (e.g. doFirst()/doLast())");
             } else {
@@ -593,6 +596,19 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
         }
 
         return false;
+    }
+
+    private boolean isAnnotationPresent(Class clazz) {
+        if (clazz.equals(Object.class)) {
+            return false;
+        }
+        List<Annotation> anns = asList(clazz.getAnnotations());
+        for (Annotation a : anns) {
+            if (a.annotationType().getSimpleName().equals("ParallelizableTask")) {
+                return true;
+            }
+        }
+        return isAnnotationPresent(clazz.getSuperclass());
     }
 
     private void recordTaskStarted(TaskInfo taskInfo) {
