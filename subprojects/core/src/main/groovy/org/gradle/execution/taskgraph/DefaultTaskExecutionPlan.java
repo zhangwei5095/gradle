@@ -78,6 +78,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
     private final Set<TaskInternal> runningTasks = Sets.newIdentityHashSet();
     private final Map<Task, Set<String>> canonicalizedOutputCache = Maps.newIdentityHashMap();
     private final Map<Task, Boolean> isParallelSafeCache = Maps.newIdentityHashMap();
+    private final Set<String> safeTasks = new HashSet<String>();
     private boolean tasksCancelled;
 
     private final boolean intraProjectParallelization;
@@ -87,7 +88,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
         this.intraProjectParallelization = intraProjectParallelization;
 
         if (intraProjectParallelization) {
-            LOGGER.info("intra project task parallelization is enabled");
+            LOGGER.lifecycle("intra project task parallelization is enabled");
         }
     }
 
@@ -304,6 +305,12 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
                 }
             }
         }
+        System.out.println("----------");
+        System.out.println("Tasks safe to run in parallel:");
+        for (String safeTask : safeTasks) {
+            System.out.println("  " + safeTask);
+        }
+        System.out.println("----------");
     }
 
     private void maybeRemoveProcessedShouldRunAfterEdge(Stack<GraphEdge> walkedShouldRunAfterEdges, TaskInfo taskNode) {
@@ -578,11 +585,14 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
             if (safe == null) {
                 safe = detectIsParallelizable(task);
                 isParallelSafeCache.put(task, safe);
+                safeTasks.add(task.getPath());
+                System.out.println(" ** safe task: " + task.getPath());
             }
 
             return safe;
         }
 
+        System.out.println(" ** UNSAFE task: " + task.getPath());
         return false;
     }
 
