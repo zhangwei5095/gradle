@@ -15,26 +15,30 @@
  */
 
 package org.gradle.play.plugins
-
+import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.TestResources
-import org.gradle.integtests.fixtures.WellBehavedPluginTest
 import org.gradle.util.TextUtil
 import org.junit.Rule
 
-class PlayCoffeeScriptPluginIntegrationTest extends WellBehavedPluginTest {
+class PlayCoffeeScriptPluginIntegrationTest extends AbstractIntegrationSpec {
     @Rule
     public final TestResources resources = new TestResources(temporaryFolder)
-
-    @Override
-    String getPluginName() {
-        return 'play-coffeescript'
-    }
 
     def setup() {
         buildFile << """
             plugins {
                 id 'play-application'
                 id 'play-coffeescript'
+            }
+
+            model {
+                components {
+                    play {
+                        sources {
+                            otherCoffeeScript(CoffeeScriptSourceSet)
+                        }
+                    }
+                }
             }
         """
     }
@@ -44,30 +48,27 @@ class PlayCoffeeScriptPluginIntegrationTest extends WellBehavedPluginTest {
         succeeds "components"
 
         then:
-        output.contains(TextUtil.toPlatformLineSeparators("""
-    CoffeeScript source 'play:coffeeScriptSources'
-        app
-"""))
-        output.contains(TextUtil.toPlatformLineSeparators("""
-    JavaScript source 'play:coffeeScriptGenerated'
-"""))
+        normalizedOutput.contains("""
+    CoffeeScript source 'play:coffeeScriptAssets'
+        app/assets
+    CoffeeScript source 'play:otherCoffeeScript'
+        src/play/otherCoffeeScript
+""")
     }
 
     def "creates and configures compile task when source exists"() {
         buildFile << """
             task checkTasks {
                 doLast {
-                    def coffeeScriptCompileTasks = tasks.withType(CoffeeScriptCompile).matching { it.name == "compilePlayBinaryPlayCoffeeScriptSources" }
-                    assert coffeeScriptCompileTasks.size() == 1
-
-                    def javaScriptProcessTasks = tasks.withType(Copy).matching { it.name == "processPlayBinaryPlayCoffeeScriptGenerated" }
-                    assert javaScriptProcessTasks.size() == 1
+                    assert tasks.withType(CoffeeScriptCompile).size() == 2
+                    tasks.withType(CoffeeScriptCompile)*.name as Set == ["compilePlayBinaryCoffeeScriptAssets", "compilePlayBinaryOtherCoffeeScript"] as Set
                 }
             }
         """
 
         when:
-        file("app/test.coffee") << "test"
+        file("app/assets/test.coffee") << "test"
+        file("src/play/otherCoffeeScript/other.coffee") << "test"
 
         then:
         succeeds "checkTasks"
@@ -84,5 +85,9 @@ class PlayCoffeeScriptPluginIntegrationTest extends WellBehavedPluginTest {
 
         expect:
         succeeds "checkTasks"
+    }
+
+    private String getNormalizedOutput() {
+        return TextUtil.normaliseLineSeparators(TextUtil.normaliseFileSeparators(output))
     }
 }

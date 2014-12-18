@@ -16,6 +16,7 @@
 
 package org.gradle.language
 
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.nativeplatform.fixtures.AbstractInstalledToolChainIntegrationSpec
 import org.gradle.nativeplatform.fixtures.AvailableToolChains
@@ -28,6 +29,7 @@ import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 import org.junit.Assume
 import spock.lang.Ignore
+import spock.lang.IgnoreIf
 
 import static org.gradle.nativeplatform.fixtures.ToolChainRequirement.GccCompatible
 import static org.gradle.nativeplatform.fixtures.ToolChainRequirement.VisualCpp
@@ -88,6 +90,7 @@ abstract class AbstractNativeLanguageIncrementalBuildIntegrationTest extends Abs
         }
     }
 
+    @IgnoreIf({GradleContextualExecuter.parallel})
     def "does not re-execute build with no change"() {
         given:
         run "installMainExecutable"
@@ -99,7 +102,7 @@ abstract class AbstractNativeLanguageIncrementalBuildIntegrationTest extends Abs
         nonSkippedTasks.empty
     }
 
-    @Requires(TestPrecondition.CAN_INSTALL_EXECUTABLE)
+    @IgnoreIf({GradleContextualExecuter.parallel || !TestPrecondition.CAN_INSTALL_EXECUTABLE.fulfilled})
     def "rebuilds executable with source file change"() {
         given:
         run "installMainExecutable"

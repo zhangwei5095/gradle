@@ -53,7 +53,7 @@ abstract class AbstractJvmPluginLanguageIntegrationTest extends AbstractIntegrat
         }
     }
 
-    task check << {
+    task validate << {
         def myLib = componentSpecs.myLib
         assert myLib instanceof JvmLibrarySpec
 
@@ -69,7 +69,7 @@ abstract class AbstractJvmPluginLanguageIntegrationTest extends AbstractIntegrat
     }
 """
         then:
-        succeeds "check"
+        succeeds "validate"
 
         and:
         !file("build").exists()
@@ -89,7 +89,7 @@ abstract class AbstractJvmPluginLanguageIntegrationTest extends AbstractIntegrat
         }
     }
 
-    task check << {
+    task validate << {
         def myLib = componentSpecs.myLib
         assert myLib instanceof JvmLibrarySpec
 
@@ -107,7 +107,7 @@ abstract class AbstractJvmPluginLanguageIntegrationTest extends AbstractIntegrat
     }
 """
         then:
-        succeeds "check"
+        succeeds "validate"
 
         and:
         !file("build").exists()
@@ -155,13 +155,18 @@ abstract class AbstractJvmPluginLanguageIntegrationTest extends AbstractIntegrat
 
         and:
         output.contains(TextUtil.toPlatformLineSeparators("""
-Source sets
     JVM resources 'myLib:extraResources'
-        src${File.separator}myLib${File.separator}extraResources
+        src${File.separator}myLib${File.separator}extraResources"""))
+
+        output.contains(TextUtil.toPlatformLineSeparators("""
     ${StringUtils.capitalize(languageName)} source 'myLib:extra${languageName}'
-        src${File.separator}myLib${File.separator}extra${languageName}
+        src${File.separator}myLib${File.separator}extra${languageName}"""))
+
+        output.contains(TextUtil.toPlatformLineSeparators("""
     JVM resources 'myLib:resources'
-        src${File.separator}myLib${File.separator}resources
+        src${File.separator}myLib${File.separator}resources"""))
+
+        output.contains(TextUtil.toPlatformLineSeparators("""
     ${StringUtils.capitalize(languageName)} source 'myLib:${languageName}'
         src${File.separator}myLib${File.separator}${languageName}"""))
     }

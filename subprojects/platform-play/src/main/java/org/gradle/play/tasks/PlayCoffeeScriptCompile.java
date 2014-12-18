@@ -18,24 +18,45 @@ package org.gradle.play.tasks;
 
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
+import org.gradle.language.base.internal.tasks.SimpleStaleClassCleaner;
+import org.gradle.language.base.internal.tasks.StaleClassCleaner;
 import org.gradle.plugins.javascript.coffeescript.CoffeeScriptCompile;
 
 /**
  * Task for compiling CoffeeScript sources
  */
 public class PlayCoffeeScriptCompile extends CoffeeScriptCompile {
-    public void setCoffeeScriptDependency(String notation) {
-        setCoffeeScriptJs(getDetachedConfiguration(notation));
+    boolean hasCustomCoffeeScript;
+
+    public void setCoffeeScriptJsNotation(String notation) {
+        super.setCoffeeScriptJs(getDetachedConfiguration(notation));
     }
 
-    public void setRhinoDependency(String notation) {
+    @Override
+    public void setCoffeeScriptJs(Object coffeeScriptJs) {
+        super.setCoffeeScriptJs(coffeeScriptJs);
+        hasCustomCoffeeScript = true;
+    }
+
+    // TODO:DAZ Need to in order to avoid overwriting custom coffee script js set in tasks.withType()
+    public boolean hasCustomCoffeeScriptJs() {
+        return hasCustomCoffeeScript;
+    }
+
+    public void setRhinoClasspathNotation(String notation) {
         setRhinoClasspath(getDetachedConfiguration(notation));
     }
 
     private Configuration getDetachedConfiguration(String notation) {
         Dependency dependency = getProject().getDependencies().create(notation);
-        Configuration configuration = getProject().getConfigurations().detachedConfiguration(dependency);
-        return configuration;
+        return getProject().getConfigurations().detachedConfiguration(dependency);
     }
 
+    @Override
+    public void doCompile() {
+        StaleClassCleaner cleaner = new SimpleStaleClassCleaner(getOutputs());
+        cleaner.setDestinationDir(getDestinationDir());
+        cleaner.execute();
+        super.doCompile();
+    }
 }

@@ -16,6 +16,7 @@
 
 package org.gradle.model.internal.manage.schema;
 
+import com.google.common.collect.ImmutableSet;
 import net.jcip.annotations.ThreadSafe;
 import org.gradle.model.internal.type.ModelType;
 
@@ -34,7 +35,7 @@ public class ModelProperty<T> {
         this.name = name;
         this.type = type;
         this.writable = writable;
-        this.declaredBy = declaredBy;
+        this.declaredBy = ImmutableSet.copyOf(declaredBy);
         this.unmanaged = unmanaged;
     }
 

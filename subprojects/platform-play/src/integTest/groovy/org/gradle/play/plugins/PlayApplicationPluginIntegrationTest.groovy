@@ -61,7 +61,7 @@ Source sets
 Binaries
     Play Application Jar 'playBinary'
         build using task: :playBinary
-        platform: PlayPlatform2.3.5
+        platform: PlayPlatform2.3.7
         tool chain: Default Play Toolchain"""))
     }
 
@@ -91,7 +91,7 @@ Binaries
         skipped(":routesCompilePlayBinary" , ":twirlCompilePlayBinary", ":scalaCompilePlayBinary")
 
         and:
-        jar("build/jars/play/playBinary.jar").hasDescendants()
+        jar("build/playBinary/lib/play.jar").hasDescendants()
     }
 
     JarTestFixture jar(String fileName) {

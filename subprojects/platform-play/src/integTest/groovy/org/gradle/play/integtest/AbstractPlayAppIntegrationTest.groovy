@@ -17,17 +17,16 @@
 package org.gradle.play.integtest
 import org.gradle.integtests.fixtures.JUnitXmlTestExecutionResult
 import org.gradle.integtests.fixtures.TestExecutionResult
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.integtests.fixtures.executer.GradleHandle
 import org.gradle.play.integtest.fixtures.MultiPlayVersionIntegrationTest
 import org.gradle.play.integtest.fixtures.app.PlayApp
 import org.gradle.util.AvailablePortFinder
-import spock.lang.IgnoreIf
+import org.gradle.util.TextUtil
 
-import static org.gradle.integtests.fixtures.UrlValidator.available
-import static org.gradle.integtests.fixtures.UrlValidator.notAvailable
+import static org.gradle.integtests.fixtures.UrlValidator.*
 
 abstract class AbstractPlayAppIntegrationTest extends MultiPlayVersionIntegrationTest {
+    int httpPort
 
     abstract PlayApp getPlayApp()
     def portFinder = AvailablePortFinder.createPrivate()
@@ -43,15 +42,7 @@ abstract class AbstractPlayAppIntegrationTest extends MultiPlayVersionIntegratio
         executedAndNotSkipped(":routesCompilePlayBinary", ":twirlCompilePlayBinary", ":createPlayBinaryJar", ":playBinary", ":assemble")
 
         and:
-        jar("build/jars/play/playBinary.jar").containsDescendants(
-                "Routes.class",
-                "views/html/index.class",
-                "views/html/main.class",
-                "controllers/Application.class",
-                "images/favicon.svg",
-                "stylesheets/main.css",
-                "javascripts/hello.js",
-                "application.conf")
+        verifyJar()
 
         when:
         succeeds("createPlayBinaryJar")
@@ -71,16 +62,16 @@ abstract class AbstractPlayAppIntegrationTest extends MultiPlayVersionIntegratio
         """
 
         when:
-        succeeds("testPlayBinary")
+        succeeds("check")
         then:
         executed(":routesCompilePlayBinary", ":twirlCompilePlayBinary", ":scalaCompilePlayBinary",
                 ":createPlayBinaryJar", ":playBinary", ":compilePlayBinaryTests", ":testPlayBinary")
 
         then:
-        verifyTestOutput(new JUnitXmlTestExecutionResult(testDirectory, "build/reports/test/playBinary"))
+        verifyTestOutput(new JUnitXmlTestExecutionResult(testDirectory, "build/playBinary/reports/test/xml"))
 
         when:
-        succeeds("testPlayBinary")
+        succeeds("check")
         then:
         skipped(":routesCompilePlayBinary", ":twirlCompilePlayBinary", ":scalaCompilePlayBinary",
                 ":createPlayBinaryJar", ":playBinary", ":compilePlayBinaryTests", ":testPlayBinary")
@@ -90,10 +81,9 @@ abstract class AbstractPlayAppIntegrationTest extends MultiPlayVersionIntegratio
      * Don't currently run with DaemonExecuter, because
      * InputForwarder is consuming stdin eagerly.
      * */
-    @IgnoreIf({ GradleContextualExecuter.isDaemon() })
     def "can run play app"(){
         setup:
-        int httpPort = portFinder.nextAvailable
+        httpPort = portFinder.nextAvailable
 
         buildFile <<
         """
@@ -105,22 +95,49 @@ abstract class AbstractPlayAppIntegrationTest extends MultiPlayVersionIntegratio
         run "assemble"
 
         when:
-        PipedInputStream inputStream = new PipedInputStream();
-        PipedOutputStream stdinWriter = new PipedOutputStream(inputStream);
-        executer.withStdIn(inputStream)
+        def userInput = new PipedOutputStream();
+        executer.withStdIn(new PipedInputStream(userInput))
         GradleHandle gradleHandle = executer.withTasks(":runPlayBinary").start()
 
         then:
-        available("http://localhost:$httpPort", "Play app", 60000)
-        assert new URL("http://localhost:$httpPort").text.contains("Your new application is ready.")
+        def url = playUrl().toString()
+        available(url, "Play app", 60000)
+        assert playUrl().text.contains("Your new application is ready.")
+
+        and:
+        verifyContent()
 
         when: "stopping gradle"
-        stdinWriter.write(4) // ctrl+d
-        stdinWriter.flush()
+        userInput.write(4) // ctrl+d
+        userInput.write(TextUtil.toPlatformLineSeparators("\n").bytes) // For some reason flush() doesn't get the keystroke to the DaemonExecuter
+
         gradleHandle.waitForFinish()
 
         then: "play server is stopped too"
-        notAvailable("http://localhost:$httpPort")
+        notAvailable(url)
+    }
+
+    void verifyJar() {
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "Routes.class",
+                "views/html/index.class",
+                "views/html/main.class",
+                "controllers/Application.class",
+                "public/images/favicon.svg",
+                "public/stylesheets/main.css",
+                "public/javascripts/hello.js",
+                "application.conf")
+    }
+
+    void verifyContent() {
+        // Check all static assets from the shared content
+        assertUrlContent playUrl("assets/stylesheets/main.css"), file("public/stylesheets/main.css")
+        assertUrlContent playUrl("assets/javascripts/hello.js"), file("public/javascripts/hello.js")
+        assertBinaryUrlContent playUrl("assets/images/favicon.svg"), file("public/images/favicon.svg")
+    }
+
+    URL playUrl(String path='') {
+        return new URL("http://localhost:$httpPort/${path}")
     }
 
     void verifyTestOutput(TestExecutionResult result) {

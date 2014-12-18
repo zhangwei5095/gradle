@@ -19,7 +19,6 @@ package org.gradle.model
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.EnableModelDsl
 import org.gradle.util.Matchers
-import spock.lang.Ignore
 
 class ManagedModelRuleIntegrationTest extends AbstractIntegrationSpec {
 
@@ -754,8 +753,7 @@ class ManagedModelRuleIntegrationTest extends AbstractIntegrationSpec {
         output.contains 'gender: MALE'
     }
 
-    @Ignore("not yet supported - we don't know about the nested property until the parent is created. Should know about it on registration.")
-    def "rule can target property of managed element"() {
+    def "rule can target structured property of managed element"() {
         given:
         EnableModelDsl.enable(executer)
 
@@ -783,9 +781,9 @@ class ManagedModelRuleIntegrationTest extends AbstractIntegrationSpec {
                 }
 
                 @Mutate
-                void addTask(CollectionBuilder<Task> tasks, OperatingSystem os) {
+                void addTask(CollectionBuilder<Task> tasks, @Path("platform.operatingSystem") OperatingSystem os) {
                   tasks.create("fromPlugin") {
-                    it.doLast { println "fromPlugin: $os.name" }
+                    doLast { println "fromPlugin: $os.name" }
                   }
                 }
             }
@@ -807,6 +805,209 @@ class ManagedModelRuleIntegrationTest extends AbstractIntegrationSpec {
         and:
         output.contains("fromPlugin: foo")
         output.contains("fromScript: foo")
+    }
+
+    def "rule can target structured property of managed element as subject"() {
+        given:
+        EnableModelDsl.enable(executer)
+
+        when:
+        buildScript '''
+            import org.gradle.model.*
+            import org.gradle.model.collection.*
+
+            @Managed
+            interface Platform {
+                OperatingSystem getOperatingSystem()
+            }
+
+            @Managed
+            interface OperatingSystem {
+                String getName()
+                void setName(String name)
+            }
+
+            @RuleSource
+            class RulePlugin {
+                @Model
+                void platform(Platform platform) {}
+
+                @Mutate
+                void setOsName(@Path("platform.operatingSystem") OperatingSystem os) {
+                  os.name = "foo"
+                }
+
+                @Mutate
+                void addTask(CollectionBuilder<Task> tasks, @Path("platform.operatingSystem") OperatingSystem os) {
+                  tasks.create("fromPlugin") {
+                    doLast { println "fromPlugin: $os.name" }
+                  }
+                }
+            }
+
+            apply type: RulePlugin
+
+            model {
+                tasks {
+                  create("fromScript") {
+                    it.doLast { println "fromScript: " + $("platform.operatingSystem.name") }
+                  }
+                }
+            }
+        '''
+
+        then:
+        succeeds "fromPlugin", "fromScript"
+
+        and:
+        output.contains("fromPlugin: foo")
+        output.contains("fromScript: foo")
+    }
+
+    def "rule can target simple property of managed element"() {
+        given:
+        EnableModelDsl.enable(executer)
+
+        when:
+        buildScript '''
+            import org.gradle.model.*
+            import org.gradle.model.collection.*
+
+            @Managed
+            interface Platform {
+                String getName()
+                void setName(String name)
+            }
+
+            @RuleSource
+            class RulePlugin {
+                @Model
+                void platform(Platform platform) {
+                  platform.name = "foo"
+                }
+
+                @Mutate
+                void addTask(CollectionBuilder<Task> tasks, @Path("platform.name") String name) {
+                  tasks.create("fromPlugin") {
+                    doLast { println "fromPlugin: $name" }
+                  }
+                }
+            }
+
+            apply type: RulePlugin
+
+            model {
+                tasks {
+                  create("fromScript") {
+                    it.doLast { println "fromScript: " + $("platform.name") }
+                  }
+                }
+            }
+        '''
+
+        then:
+        succeeds "fromPlugin", "fromScript"
+
+        and:
+        output.contains("fromPlugin: foo")
+        output.contains("fromScript: foo")
+    }
+
+    def "mutation rule can target property of managed element"() {
+        given:
+        EnableModelDsl.enable(executer)
+
+        when:
+        buildScript '''
+            import org.gradle.model.*
+            import org.gradle.model.collection.*
+
+            @Managed
+            interface Platform {
+                OperatingSystem getOperatingSystem()
+            }
+
+            @Managed
+            interface OperatingSystem {
+                String getName()
+                void setName(String name)
+            }
+
+            @RuleSource
+            class RulePlugin {
+                @Model
+                void platform(Platform platform) {
+                  platform.operatingSystem.name = "foo"
+                }
+
+                @Mutate
+                void addTask(CollectionBuilder<Task> tasks, @Path("platform.operatingSystem.name") String name) {
+                  tasks.create("fromPlugin") {
+                    doLast { println "fromPlugin: $name" }
+                  }
+                }
+            }
+
+            apply type: RulePlugin
+
+            model {
+                tasks {
+                  create("fromScript") {
+                    it.doLast { println "fromScript: " + $("platform.operatingSystem.name") }
+                  }
+                }
+            }
+        '''
+
+        then:
+        succeeds "fromPlugin", "fromScript"
+
+        and:
+        output.contains("fromPlugin: foo")
+        output.contains("fromScript: foo")
+    }
+
+    def "creation rule can target property of managed element"() {
+        when:
+        buildScript '''
+            import org.gradle.model.*
+            import org.gradle.model.collection.*
+
+            @Managed
+            interface OperatingSystem {
+                String getName()
+                void setName(String name)
+            }
+
+            @RuleSource
+            class RulePlugin {
+                @Model
+                void operatingSystem(OperatingSystem operatingSystem) {
+                  operatingSystem.name = "foo"
+                }
+
+                @Model
+                String name(@Path("operatingSystem.name") String name) {
+                  name
+                }
+
+                @Mutate
+                void addTask(CollectionBuilder<Task> tasks, @Path("name") String name) {
+                  tasks.create("echo") {
+                    doLast { println "name: $name" }
+                  }
+                }
+
+            }
+
+            apply type: RulePlugin
+        '''
+
+        then:
+        succeeds "echo"
+
+        and:
+        output.contains("name: foo")
     }
 
     def "managed model interface can extend other interface"() {
@@ -1003,5 +1204,66 @@ class ManagedModelRuleIntegrationTest extends AbstractIntegrationSpec {
         output.contains('value: foo')
     }
 
+    def "unmanaged property of managed can be targeted by rules"() {
+        given:
+        EnableModelDsl.enable(executer)
+
+        when:
+        buildScript '''
+            import org.gradle.model.*
+            import org.gradle.model.collection.*
+
+            @Managed
+            interface Platform {
+                @Unmanaged
+                OperatingSystem getOperatingSystem()
+                void setOperatingSystem(OperatingSystem os)
+            }
+
+            class OperatingSystem {
+                String name
+            }
+
+            @RuleSource
+            class RulePlugin {
+                @Model
+                void platform(Platform platform) {}
+
+                @Mutate
+                void setOs(Platform platform) {
+                    platform.operatingSystem = new OperatingSystem()
+                }
+
+                @Mutate
+                void setOsName(@Path("platform.operatingSystem") OperatingSystem os) {
+                  os.name = "foo"
+                }
+
+                @Mutate
+                void addTask(CollectionBuilder<Task> tasks, @Path("platform.operatingSystem") OperatingSystem os) {
+                  tasks.create("fromPlugin") {
+                    doLast { println "fromPlugin: $os.name" }
+                  }
+                }
+            }
+
+            apply type: RulePlugin
+
+            model {
+                tasks {
+                  create("fromScript") {
+                    it.doLast { println "fromScript: " + $("platform.operatingSystem").name }
+                  }
+                }
+            }
+        '''
+
+        then:
+        succeeds "fromPlugin", "fromScript"
+
+        and:
+        output.contains("fromPlugin: foo")
+        output.contains("fromScript: foo")
+    }
 
 }

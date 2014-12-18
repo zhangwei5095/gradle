@@ -15,16 +15,10 @@
  */
 
 package org.gradle.play.plugins
-
-import org.gradle.integtests.fixtures.WellBehavedPluginTest
+import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.util.TextUtil
 
-class PlayJavaScriptPluginIntegrationTest extends WellBehavedPluginTest {
-
-    @Override
-    String getPluginName() {
-        return 'play-javascript'
-    }
+class PlayJavaScriptPluginIntegrationTest extends AbstractIntegrationSpec {
 
     def setup() {
         buildFile << """
@@ -32,32 +26,45 @@ class PlayJavaScriptPluginIntegrationTest extends WellBehavedPluginTest {
                 id 'play-application'
                 id 'play-javascript'
             }
+
+            model {
+                components {
+                    play {
+                        sources {
+                            otherJavaScript(JavaScriptSourceSet)
+                        }
+                    }
+                }
+            }
         """
     }
 
-    def "javascript source set appears in component listing"() {
+    def "javascript source sets appear in component listing"() {
         when:
         succeeds "components"
 
         then:
-        output.contains(TextUtil.toPlatformLineSeparators("""
-    JavaScript source 'play:javaScriptSources'
-        app
-"""))
+        normalizedOutput.contains("""
+    JavaScript source 'play:javaScriptAssets'
+        app/assets
+    JavaScript source 'play:otherJavaScript'
+        src/play/otherJavaScript
+""")
     }
 
     def "creates and configures process task when source exists"() {
         buildFile << """
             task checkTasks {
                 doLast {
-                    def javaScriptProcessTasks = tasks.withType(Copy).matching { it.name == "processPlayBinaryPlayJavaScriptSources" }
-                    assert javaScriptProcessTasks.size() == 1
+                    assert tasks.withType(JavaScriptProcessResources).size() == 2
+                    tasks.withType(JavaScriptProcessResources)*.name as Set == ["processPlayBinaryJavaScriptAssets", "processPlayBinaryOtherJavaScript"] as Set
                 }
             }
         """
 
         when:
-        file("app/test.js") << "test"
+        file("app/assets/test.js") << "test"
+        file("src/play/otherJavaScript/other.js") << "test"
 
         then:
         succeeds "checkTasks"
@@ -67,13 +74,16 @@ class PlayJavaScriptPluginIntegrationTest extends WellBehavedPluginTest {
         buildFile << """
             task checkTasks {
                 doLast {
-                    def javaScriptProcessTasks = tasks.withType(Copy).matching { it.name == "processPlayBinaryPlayJavaScriptSources" }
-                    assert javaScriptProcessTasks.size() == 0
+                    assert tasks.withType(JavaScriptProcessResources).size() == 0
                 }
             }
         """
 
         expect:
         succeeds "checkTasks"
+    }
+
+    private String getNormalizedOutput() {
+        return TextUtil.normaliseLineSeparators(TextUtil.normaliseFileSeparators(output))
     }
 }

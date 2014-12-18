@@ -228,7 +228,9 @@ Access the ivy.xml files for a ivy components with the specified id:
         .withArtifacts(IvyModule, IvyDescriptorArtifact)
         .execute()
 
-    Set<File> ivyFiles = result.getArtifactFiles()
+    for(component in result.resolvedComponents) {
+        component.getArtifacts(IvyDescriptorArtifact).each { assert it.file.name == 'ivy.xml' }
+    }
 
 Get the pom files for all maven modules in a configuration:
 
@@ -236,18 +238,19 @@ Get the pom files for all maven modules in a configuration:
         .forComponents(mavenModuleComponentId1, mavenModuleComponentId2)
         .withArtifacts(MavenModule, MavenPomArtifact)
         .execute()
-    Set<File> pomFiles = artifactResult.getArtifactFiles()
+
+    for(component in result.resolvedComponents) {
+        component.getArtifacts(MavenPomArtifact).each { assert it.file.name == 'some-artifact-1.0.pom' }
+    }
 
 ### Implementation
 
 - Introduce `Module` domain model:
-    - Add the interface `org.gradle.jvm.Module` in the project `platform-jvm`. The interface extends `org.gradle.jvm.Component`.
-    - Add the interface `org.gradle.jvm.IvyModule` in the project `platform-jvm`. The interface extends `org.gradle.jvm.Module`.
-    - Add the interface `org.gradle.jvm.MavenModule` in the project `platform-jvm`. The interface extends `org.gradle.jvm.Module`.
+    - Add the interface `org.gradle.ivy.IvyModule` in the project `ivy`. The interface extends `org.gradle.api.component.Component`.
+    - Add the interface `org.gradle.maven.MavenModule` in the project `maven`. The interface extends `org.gradle.api.component.Component`.
 - Introduce `Artifact` domain model:
-    - Add the interface `org.gradle.jvm.artifact.MetadataArtifact` in the project `platform-jvm`. The interface extends `org.gradle.api.component.Artifact`.
-    - Add the interface `org.gradle.jvm.artifact.IvyDescriptorArtifact` in the project `platform-jvm`. The interface extends `org.gradle.jvm.artifact.MetadataArtifact`.
-    - Add the interface `org.gradle.jvm.artifact.MavenPomArtifact` in the project `platform-jvm`. The interface extends `org.gradle.jvm.artifact.MetadataArtifact`.
+    - Add the interface `org.gradle.ivy.IvyDescriptorArtifact` in the project `ivy`. The interface extends `org.gradle.api.component.Artifact`.
+    - Add the interface `org.gradle.maven.MavenPomArtifact` in the project `maven`. The interface extends `org.gradle.api.component.Artifact`.
 
 ### Test cases
 

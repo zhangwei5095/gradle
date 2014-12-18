@@ -17,8 +17,8 @@
 package org.gradle.integtests.resolve.ivy
 
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.fixtures.executer.ExecutionFailure
 import org.gradle.integtests.resolve.MetadataArtifactResolveTestFixture
+import org.gradle.internal.resolve.ArtifactResolveException
 import org.gradle.test.fixtures.ivy.IvyRepository
 import org.gradle.test.fixtures.server.http.IvyHttpModule
 import spock.lang.Unroll
@@ -41,34 +41,19 @@ repositories {
 """
     }
 
-    def "sucessfully resolve existing Ivy module artifact"() {
+    def "successfully resolve existing Ivy module artifact"() {
         given:
         IvyHttpModule module = publishModule()
 
         when:
         fixture.requestComponent('IvyModule').requestArtifact('IvyDescriptorArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([module.ivy.file] as Set)
+               .expectResolvedComponentResult().expectMetadataFiles(module.ivy.file)
                .createVerifyTaskModuleComponentIdentifier()
 
         module.ivy.expectGet()
 
         then:
         checkArtifactsResolvedAndCached()
-    }
-
-    def "cannot call withArtifacts multiple times for query"() {
-        given:
-        IvyHttpModule module = publishModule()
-
-        when:
-        fixture.requestComponent('IvyModule').requestArtifact('IvyDescriptorArtifact')
-               .createVerifyTaskForDuplicateCallToWithArtifacts()
-
-        module.ivy.expectGet()
-        ExecutionFailure failure = fails('verify')
-
-        then:
-        failure.assertHasCause('Cannot specify component type multiple times.')
     }
 
     @Unroll
@@ -78,7 +63,7 @@ repositories {
 
         when:
         fixture.requestComponent(component).requestArtifact(artifactType)
-               .expectComponentResult('UnresolvedComponentResult').expectMetadataFiles([] as Set)
+               .expectUnresolvedComponentResult(exception).expectMetadataFiles()
                .createVerifyTaskModuleComponentIdentifier()
         module.ivy.expectGet()
 
@@ -86,12 +71,9 @@ repositories {
         checkArtifactsResolvedAndCached()
 
         where:
-        component     | artifactType            | reason
-        'JvmLibrary'  | 'IvyDescriptorArtifact' | 'cannot mix JvmLibrary with metadata artifact types'
-        'IvyModule'   | 'SourcesArtifact'       | 'cannot mix IvyModule with JVM library artifact type SourcesArtifact'
-        'IvyModule'   | 'JavadocArtifact'       | 'cannot mix IvyModule with JVM library artifact type JavadocArtifact'
-        'IvyModule'   | 'MavenPomArtifact'      | 'cannot mix IvyModule with Maven metadata artifact type MavenPomArtifact'
-        'MavenModule' | 'MavenPomArtifact'      | 'cannot retrieve Maven component and metadata artifact for Ivy module'
+        component     | artifactType       | reason                                                                    | exception
+        'IvyModule'   | 'MavenPomArtifact' | 'cannot mix IvyModule with Maven metadata artifact type MavenPomArtifact' | new IllegalArgumentException('Artifact type org.gradle.maven.MavenPomArtifact is not registered for component type org.gradle.ivy.IvyModule.')
+        'MavenModule' | 'MavenPomArtifact' | 'cannot retrieve Maven component and metadata artifact for Ivy module'    | new ArtifactResolveException("Could not determine artifacts for some.group:some-artifact:1.0: Cannot locate 'maven pom' artifacts for 'some.group:some-artifact:1.0' in repository 'ivy'")
     }
 
     def "requesting IvyModule for a project component"() {
@@ -100,13 +82,14 @@ repositories {
 
         when:
         fixture.requestComponent('IvyModule').requestArtifact('IvyDescriptorArtifact')
+               .expectUnresolvedComponentResult(new IllegalArgumentException("Cannot query artifacts for a project component (project :)"))
+               .expectMetadataFiles()
                .createVerifyTaskForProjectComponentIdentifier()
 
         module.ivy.expectGet()
-        ExecutionFailure failure = fails('verify')
 
         then:
-        failure.assertHasCause("Cannot resolve the artifacts for component project : with unsupported type org.gradle.internal.component.local.model.DefaultProjectComponentIdentifier.")
+        checkArtifactsResolvedAndCached()
     }
 
     def "request an ivy descriptor for an ivy module with no descriptor"() {
@@ -115,19 +98,15 @@ repositories {
 
         when:
         fixture.requestComponent('IvyModule').requestArtifact('IvyDescriptorArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([] as Set)
+               .expectResolvedComponentResult().expectMetadataFiles()
                .createVerifyTaskModuleComponentIdentifier()
 
-        // TODO: Need to look into expectations
-        module.ivy.expectGet()
-        module.ivy.expectGet()
+        module.ivy.expectGetMissing()
+        module.ivy.expectGetMissing()
         module.jar.expectHead()
-        ExecutionFailure failure = fails('verify')
 
         then:
-        failure.assertHasCause("""Could not find ivy.xml (${fixture.id.displayName}).
-Searched in the following locations:
-    ${module.ivy.uri}""")
+        checkArtifactsResolvedAndCached()
     }
 
     @Unroll
@@ -137,7 +116,7 @@ Searched in the following locations:
 
         fixture.configureChangingModule()
         fixture.requestComponent('IvyModule').requestArtifact('IvyDescriptorArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([module.ivyFile] as Set)
+               .expectResolvedComponentResult().expectMetadataFiles(module.ivyFile)
                .createVerifyTaskModuleComponentIdentifier()
 
         when:

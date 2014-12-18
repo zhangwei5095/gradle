@@ -15,10 +15,9 @@
  */
 
 package org.gradle.integtests.resolve.maven
-
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.fixtures.executer.ExecutionFailure
 import org.gradle.integtests.resolve.MetadataArtifactResolveTestFixture
+import org.gradle.internal.resolve.ArtifactResolveException
 import org.gradle.test.fixtures.maven.MavenRepository
 import org.gradle.test.fixtures.server.http.MavenHttpModule
 import spock.lang.Unroll
@@ -41,34 +40,19 @@ repositories {
 """
     }
 
-    def "sucessfully resolve existing Maven module artifact"() {
+    def "successfully resolve existing Maven module artifact"() {
         given:
         MavenHttpModule module = publishModule()
 
         when:
         fixture.requestComponent('MavenModule').requestArtifact('MavenPomArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([module.pom.file] as Set)
-               .createVerifyTaskModuleComponentIdentifier()
+                .expectResolvedComponentResult().expectMetadataFiles(module.pom.file)
+                .createVerifyTaskModuleComponentIdentifier()
 
         module.pom.expectGet()
 
         then:
         checkArtifactsResolvedAndCached()
-    }
-
-    def "cannot call withArtifacts multiple times for query"() {
-        given:
-        MavenHttpModule module = publishModule()
-
-        when:
-        fixture.requestComponent('MavenModule').requestArtifact('MavenPomArtifact')
-               .createVerifyTaskForDuplicateCallToWithArtifacts()
-
-        module.pom.expectGet()
-        ExecutionFailure failure = fails('verify')
-
-        then:
-        failure.assertHasCause('Cannot specify component type multiple times.')
     }
 
     @Unroll
@@ -78,7 +62,7 @@ repositories {
 
         when:
         fixture.requestComponent(component).requestArtifact(artifactType)
-                .expectComponentResult('UnresolvedComponentResult').expectMetadataFiles([] as Set)
+                .expectUnresolvedComponentResult(exception).expectMetadataFiles()
                 .createVerifyTaskModuleComponentIdentifier()
         module.pom.expectGet()
 
@@ -86,27 +70,24 @@ repositories {
         checkArtifactsResolvedAndCached()
 
         where:
-        component     | artifactType            | reason
-        'JvmLibrary'  | 'MavenPomArtifact'      | 'cannot mix JvmLibrary with metadata artifact types'
-        'MavenModule' | 'SourcesArtifact'       | 'cannot mix MavenModule with JVM library artifact type SourcesArtifact'
-        'MavenModule' | 'JavadocArtifact'       | 'cannot mix MavenModule with JVM library artifact type JavadocArtifact'
-        'MavenModule' | 'IvyDescriptorArtifact' | 'cannot mix MavenModule with Maven metadata artifact type IvyDescriptorArtifact'
-        'IvyModule'   | 'MavenPomArtifact'      | 'cannot retrieve Ivy component and metadata artifact for Maven module'
+        component     | artifactType            | reason                                                                           | exception
+        'MavenModule' | 'IvyDescriptorArtifact' | 'cannot mix MavenModule with Maven metadata artifact type IvyDescriptorArtifact' | new IllegalArgumentException('Artifact type org.gradle.ivy.IvyDescriptorArtifact is not registered for component type org.gradle.maven.MavenModule.')
+        'IvyModule'   | 'IvyDescriptorArtifact' | 'cannot retrieve Ivy component and metadata artifact for Maven module'           | new ArtifactResolveException("Could not determine artifacts for some.group:some-artifact:1.0: Cannot locate 'ivy descriptor' artifacts for 'some.group:some-artifact:1.0' in repository 'maven'")
     }
 
     def "requesting MavenModule for a project component"() {
-        given:
         MavenHttpModule module = publishModule()
 
         when:
         fixture.requestComponent('MavenModule').requestArtifact('MavenPomArtifact')
+               .expectUnresolvedComponentResult(new IllegalArgumentException("Cannot query artifacts for a project component (project :)"))
+               .expectMetadataFiles()
                .createVerifyTaskForProjectComponentIdentifier()
 
         module.pom.expectGet()
-        ExecutionFailure failure = fails('verify')
 
         then:
-        failure.assertHasCause("Cannot resolve the artifacts for component project : with unsupported type org.gradle.internal.component.local.model.DefaultProjectComponentIdentifier.")
+        checkArtifactsResolvedAndCached()
     }
 
     def "request an Maven POM for a Maven module with no metadata"() {
@@ -115,20 +96,15 @@ repositories {
 
         when:
         fixture.requestComponent('MavenModule').requestArtifact('MavenPomArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([] as Set)
+               .expectResolvedComponentResult().expectMetadataFiles()
                .createVerifyTaskModuleComponentIdentifier()
 
-        // TODO: Need to look into expectations
-        module.pom.expectGet()
-        module.pom.expectGet()
+        module.pom.expectGetMissing()
+        module.pom.expectGetMissing()
         module.artifact.expectHead()
-        ExecutionFailure failure = fails('verify')
 
         then:
-        failure.assertHasCause("""Could not find some-artifact.pom (${fixture.id.displayName}).
-Searched in the following locations:
-    ${module.pom.uri}""")
-
+        checkArtifactsResolvedAndCached()
     }
 
     @Unroll
@@ -138,7 +114,7 @@ Searched in the following locations:
 
         fixture.configureChangingModule()
         fixture.requestComponent('MavenModule').requestArtifact('MavenPomArtifact')
-               .expectComponentResult('ComponentArtifactsResult').expectMetadataFiles([module.pomFile] as Set)
+               .expectResolvedComponentResult().expectMetadataFiles(module.pomFile)
                .createVerifyTaskModuleComponentIdentifier()
 
         when:

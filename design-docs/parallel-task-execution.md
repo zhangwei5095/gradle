@@ -25,7 +25,7 @@ In addition to the specific tests written while implementing this, the existing 
 
 ## Milestone 1 - announce-able
 
-### `DefaultTask` based task implementation opts in to parallel execution via annotation
+### ~~`DefaultTask` based task implementation opts in to parallel execution via annotation~~
 
     @org.gradle.api.tasks.ParallelizableTask
     class MyTask extends DefaultTask {
@@ -77,14 +77,50 @@ We may find that the amount of problems means that we need to temporarily not en
 
 #### Test Coverage
 
-- `./gradlew clean compileJava` is safe, in that `clean` is run exclusively 
-- Ensure that existing parallel CI builds are executing all integration tests using Java plugin with intra project parallel task execution
+- ~~`./gradlew clean compileJava` is safe, in that `clean` is run exclusively~~ 
+- ~~Ensure that existing parallel CI builds are executing all integration tests using Java plugin with intra project parallel task execution~~
 
 ### Some level of validation/enforcement for tasks declaring to be parallel safe
 
 What exactly can be/should be verified and/or enforced is yet to be determined.
 
 Ideally, the parallelizable tasks of the JavaPlugin (previous story) conform to the requirements without breaking changes.
+
+### Suitable tasks of native plugins are parallel enabled
+
+Candidates:
+
+- `Assemble`
+- `CCompile`
+- `CppCompile`
+- `ObjectiveCCompile`
+- `ObjectiveCppCompile`
+- `WindowsResourceCompile`
+- `CreateStaticLibrary`
+- `InstallExecutable`
+- `LinkExecutable`
+- `LinkSharedLibrary`
+- `RunTestExecutable`
+
+The implementation of these tasks needs to be examined/changed to ensure they are safe to parallelize.
+
+### Suitable tasks of Java code quality plugins are parallel enabled
+
+Checkstyle etc.
+
+### Two tasks are not executed in parallel if their outputs are declared as overlapping parts of the filesystem
+
+It's possible that two task write to overlapping parts of the file system.
+This might cause data corruption as well as exceptions being thrown while 
+This is indeed the case for `Test` tasks used in a single project because Java plugin defaults the report directory of all `Test` tasks to the same directory.
+Overlapping outputs declared by two tasks should be detected and such tasks should not be executed in parallel.
+ 
+#### Test coverage
+
+- Two parallelizable tasks `:a` and `:b` don't run in parallel if the same file `x` is output of both task `:a` and task `:b`
+- Two parallelizable tasks `:a` and `:b` don't run in parallel if directory `x` is an output of task `:a` and file `x/y/z` is output of task `:b`
+- Two non-parallelizable tasks `:a:a` and `:b:a` don't run in parallel if the same file `x` is output of both task `:a:a` and task `:b:a`
+- Two non-parallelizable tasks `:a:a` and `:b:a` don't run in parallel if directory `x` is an output of task `:a:a` and file `x/y/z` is output of task `:b:a`
 
 ### Document how to write parallelizable tasks
 
@@ -100,3 +136,26 @@ Ideally, the parallelizable tasks of the JavaPlugin (previous story) conform to 
 ## Milestone 2 - improved task scheduling
 
 ## Milestone 3 - improved feedback/reporting when executing tasks in parallel
+
+# Backlog
+
+## Misc known concurrency issues
+
+- DefaultIsolatedAntBuilder (build scoped & mutable)
+- `JdkJavaCompiler` relies on setting `java.home` system property to call `ToolProvider.getSystemJavaCompiler()`
+- Java plugin defaults the report directory of all `Test` tasks to the same directory
+- Old Maven plugin is not safe to use concurrently
+- Incorrect logging from ProgressLogEventGenerator if start and end events for different operations interleave leading to reporting incorrect task status, e.g. saying that a task was up-to-date when actually a different task was up-to-date.
+
+## Overlapping task outputs detection
+
+- Output of one task that is a symlink linking to an output or a descendant of an output of another task does not prevent these tasks from being run in parallel
+
+## Task inputs
+
+- Tasks may call convention mapped getters that are not threadsafe, which the task impl can't know about (e.g. default dependency pattern used by code quality plugins to provide default impl)
+- Input data types may not be safe to read concurrently (though, task implementors should be able to determine this, or specify that any impls/specializations of input types are thread safe and effectively immutable at execution)
+
+## Usability/Configurability
+
+- Can't enable parallel execution with specified thread pool size via “env” (i.e. no sys prop, `gradle.startParameter.parallelThreadCount = «N»` does not work because value is read very early)

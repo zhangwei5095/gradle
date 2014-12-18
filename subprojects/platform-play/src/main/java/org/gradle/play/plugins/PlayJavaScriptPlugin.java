@@ -16,112 +16,76 @@
 
 package org.gradle.play.plugins;
 
-import org.gradle.api.DefaultTask;
-import org.gradle.api.Plugin;
-import org.gradle.api.Project;
+import org.gradle.api.Action;
+import org.gradle.api.NamedDomainObjectFactory;
 import org.gradle.api.Task;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.tasks.Copy;
+import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.service.ServiceRegistry;
-import org.gradle.language.base.LanguageSourceSet;
-import org.gradle.language.base.internal.LanguageRegistration;
-import org.gradle.language.base.internal.LanguageRegistry;
-import org.gradle.language.base.internal.SourceTransformTaskConfig;
+import org.gradle.language.base.FunctionalSourceSet;
+import org.gradle.language.base.internal.LanguageSourceSetInternal;
 import org.gradle.language.javascript.JavaScriptSourceSet;
 import org.gradle.language.javascript.internal.DefaultJavaScriptSourceSet;
 import org.gradle.model.Mutate;
+import org.gradle.model.Path;
 import org.gradle.model.RuleSource;
-import org.gradle.platform.base.BinarySpec;
+import org.gradle.model.collection.CollectionBuilder;
+import org.gradle.platform.base.BinaryTasks;
 import org.gradle.platform.base.ComponentSpecContainer;
-import org.gradle.platform.base.TransformationFileType;
 import org.gradle.platform.base.internal.ComponentSpecInternal;
-import org.gradle.play.JavaScriptFile;
-import org.gradle.play.PlayApplicationBinarySpec;
 import org.gradle.play.PlayApplicationSpec;
+import org.gradle.play.internal.PlayApplicationBinarySpecInternal;
+import org.gradle.play.tasks.JavaScriptProcessResources;
 
 import java.io.File;
-import java.util.Collections;
-import java.util.Map;
+
+import static org.apache.commons.lang.StringUtils.capitalize;
 
 /**
- * Plugin for adding javascript processing to a Play application
+ * Plugin for adding javascript processing to a Play application.  Registers "javascript" language support with the {@link org.gradle.language.javascript.JavaScriptSourceSet}.
  */
-public class PlayJavaScriptPlugin implements Plugin<Project> {
-    public void apply(Project target) {
+@SuppressWarnings("UnusedDeclaration")
+@RuleSource
+public class PlayJavaScriptPlugin {
+    @Mutate
+    void createJavascriptSourceSets(ComponentSpecContainer components, final ServiceRegistry serviceRegistry) {
+        for (PlayApplicationSpec playComponent : components.withType(PlayApplicationSpec.class)) {
+            registerSourceSetFactory((ComponentSpecInternal) playComponent, serviceRegistry.get(Instantiator.class), serviceRegistry.get(FileResolver.class));
 
+            JavaScriptSourceSet javaScriptSourceSet = ((ComponentSpecInternal) playComponent).getSources().create("javaScriptAssets", JavaScriptSourceSet.class);
+            javaScriptSourceSet.getSource().srcDir("app/assets");
+            javaScriptSourceSet.getSource().include("**/*.js");
+        }
     }
 
-    /**
-     * Model rules.
-     */
-    @SuppressWarnings("UnusedDeclaration")
-    @RuleSource
-    static class Rules {
-        @Mutate
-        void registerLanguage(LanguageRegistry languages) {
-            languages.add(new JavaScript());
-        }
-
-        @Mutate
-        void createJavaScriptSources(ComponentSpecContainer components, final ServiceRegistry serviceRegistry) {
-            for (PlayApplicationSpec playComponent : components.withType(PlayApplicationSpec.class)) {
-                JavaScriptSourceSet javaScriptSourceSet = new DefaultJavaScriptSourceSet("javaScriptSources", playComponent.getName(), serviceRegistry.get(FileResolver.class));
-                javaScriptSourceSet.getSource().srcDir("app");
-                javaScriptSourceSet.getSource().include("**/*.js");
-                ((ComponentSpecInternal) playComponent).getSources().add(javaScriptSourceSet);
+    // TODO:DAZ This should be done via a @LanguageType rule
+    private void registerSourceSetFactory(ComponentSpecInternal playComponent, final Instantiator instantiator, final FileResolver fileResolver) {
+        final FunctionalSourceSet functionalSourceSet = playComponent.getSources();
+        NamedDomainObjectFactory<JavaScriptSourceSet> namedDomainObjectFactory = new NamedDomainObjectFactory<JavaScriptSourceSet>() {
+            public JavaScriptSourceSet create(String name) {
+                return instantiator.newInstance(DefaultJavaScriptSourceSet.class, name, functionalSourceSet.getName(), fileResolver);
             }
-        }
+        };
+        functionalSourceSet.registerFactory(JavaScriptSourceSet.class, namedDomainObjectFactory);
     }
 
-    /**
-     * JavaScript language implementation
-     */
-    static class JavaScript implements LanguageRegistration<JavaScriptSourceSet> {
-        public String getName() {
-            return "javascript";
-        }
+    @BinaryTasks
+    void createJavaScriptTasks(CollectionBuilder<Task> tasks, final PlayApplicationBinarySpecInternal binary, final ServiceRegistry serviceRegistry, @Path("buildDir") final File buildDir) {
+        for (final JavaScriptSourceSet javaScriptSourceSet : binary.getSource().withType(JavaScriptSourceSet.class)) {
+            if (((LanguageSourceSetInternal) javaScriptSourceSet).getMayHaveSources()) {
+                final String processTaskName = "process" + capitalize(binary.getName()) + capitalize(javaScriptSourceSet.getName());
+                tasks.create(processTaskName, JavaScriptProcessResources.class, new Action<JavaScriptProcessResources>() {
+                    @Override
+                    public void execute(JavaScriptProcessResources javaScriptProcessResources) {
+                        File javascriptOutputDirectory = new File(buildDir, String.format("%s/src/%s", binary.getName(), processTaskName));
+                        javaScriptProcessResources.from(javaScriptSourceSet.getSource());
+                        javaScriptProcessResources.setDestinationDir(javascriptOutputDirectory);
 
-        public Class<JavaScriptSourceSet> getSourceSetType() {
-            return JavaScriptSourceSet.class;
-        }
-
-        public Class<? extends JavaScriptSourceSet> getSourceSetImplementation() {
-            return DefaultJavaScriptSourceSet.class;
-        }
-
-        public Map<String, Class<?>> getBinaryTools() {
-            return Collections.emptyMap();
-        }
-
-        public Class<? extends TransformationFileType> getOutputType() {
-            return JavaScriptFile.class;
-        }
-
-        public SourceTransformTaskConfig getTransformTask() {
-            return new SourceTransformTaskConfig() {
-                public String getTaskPrefix() {
-                    return "process";
-                }
-
-                public Class<? extends DefaultTask> getTaskType() {
-                    return Copy.class;
-                }
-
-                public void configureTask(Task task, BinarySpec binary, LanguageSourceSet sourceSet) {
-                    JavaScriptSourceSet javaScriptSourceSet = (JavaScriptSourceSet) sourceSet;
-                    PlayApplicationBinarySpec spec = (PlayApplicationBinarySpec) binary;
-                    Copy copyTask = (Copy) task;
-                    copyTask.from(javaScriptSourceSet.getSource());
-                    File javascriptOutputDir = new File(task.getProject().getBuildDir(), String.format("%s/javascript", binary.getName()));
-                    copyTask.into(javascriptOutputDir);
-                    spec.getClasses().addResourceDir(javascriptOutputDir);
-                    spec.getClasses().builtBy(copyTask);
-                }
-            };
-        }
-
-        public boolean applyToBinary(BinarySpec binary) {
-            return binary instanceof PlayApplicationBinarySpec;
+                        binary.getAssets().builtBy(javaScriptProcessResources);
+                        binary.getAssets().addAssetDir(javascriptOutputDirectory);
+                    }
+                });
+            }
         }
     }
 }

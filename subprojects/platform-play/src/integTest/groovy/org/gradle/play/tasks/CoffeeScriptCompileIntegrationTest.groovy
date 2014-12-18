@@ -18,12 +18,13 @@ package org.gradle.play.tasks
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.archive.JarTestFixture
+import org.gradle.test.fixtures.file.TestFile
 
 class CoffeeScriptCompileIntegrationTest extends AbstractIntegrationSpec {
     def setup() {
         buildFile << """
             plugins {
-                id 'play-application'
+                id 'play'
                 id 'play-coffeescript'
             }
 
@@ -42,69 +43,31 @@ class CoffeeScriptCompileIntegrationTest extends AbstractIntegrationSpec {
     }
 
     def "compiles default coffeescript source set as part of play application build" () {
-        given:
-        withCoffeeScriptSource("app/test.coffee")
-
         when:
+        withCoffeeScriptSource(assets("test.coffee"))
         succeeds "assemble"
 
         then:
         executedAndNotSkipped(
-                ":compilePlayBinaryPlayCoffeeScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
+                ":compilePlayBinaryCoffeeScriptAssets",
+                ":processPlayBinaryCoffeeScriptAssets",
                 ":createPlayBinaryJar",
                 ":playBinary")
-        file("build/playBinary/coffeescript/test.js").exists()
-        compareWithoutWhiteSpace file("build/playBinary/coffeescript/test.js").text, expectedJavaScript()
-        jar("build/jars/play/playBinary.jar").containsDescendants(
-                "test.js"
+        processed("test.js").exists()
+        compareWithoutWhiteSpace processed("test.js").text, expectedJavaScript()
+
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "public/test.js"
         )
-
-        // Up-to-date works
-        when:
-        succeeds "assemble"
-
-        then:
-        skipped(":compilePlayBinaryPlayCoffeeScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
-                ":createPlayBinaryJar",
-                ":playBinary")
-
-        // Detects missing output
-        when:
-        file("build/playBinary/coffeescript/test.js").delete()
-        file("build/playBinary/javascript/test.js").delete()
-        file("build/jars/play/playBinary.jar").delete()
-        succeeds "assemble"
-
-        then:
-        executedAndNotSkipped(
-                ":compilePlayBinaryPlayCoffeeScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
-                ":createPlayBinaryJar",
-                ":playBinary")
-        file("build/playBinary/coffeescript/test.js").exists()
-
-        // Detects changed input
-        when:
-        file("app/test.coffee") << '\nalert "this is a change!"'
-        succeeds "assemble"
-
-        then:
-        executedAndNotSkipped(
-                ":compilePlayBinaryPlayCoffeeScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
-                ":createPlayBinaryJar",
-                ":playBinary")
     }
 
     def "compiles multiple coffeescript source sets as part of play application build" () {
         given:
-        withCoffeeScriptSource("app/test1.coffee")
+        withCoffeeScriptSource(assets("test1.coffee"))
         withCoffeeScriptSource("src/play/extraCoffeeScript/xxx/test2.coffee")
         withCoffeeScriptSource("extra/a/b/c/test3.coffee")
-        file('src/play/extraJavaScript/test/test4.js') << expectedJavaScript()
-        file('app/test5.js') << expectedJavaScript()
+        withJavaScriptSource('src/play/extraJavaScript/test/test4.js')
+        withJavaScriptSource(assets("test5.js"))
 
         when:
         buildFile << """
@@ -126,44 +89,134 @@ class CoffeeScriptCompileIntegrationTest extends AbstractIntegrationSpec {
 
         then:
         executedAndNotSkipped(
-                ":compilePlayBinaryPlayCoffeeScriptSources",
-                ":compilePlayBinaryPlayExtraCoffeeScript",
-                ":compilePlayBinaryPlayAnotherCoffeeScript",
-                ":processPlayBinaryPlayExtraJavaScript",
-                ":processPlayBinaryPlayJavaScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
+                ":compilePlayBinaryCoffeeScriptAssets",
+                ":processPlayBinaryCoffeeScriptAssets",
+                ":compilePlayBinaryExtraCoffeeScript",
+                ":processPlayBinaryExtraCoffeeScript",
+                ":compilePlayBinaryAnotherCoffeeScript",
+                ":processPlayBinaryAnotherCoffeeScript",
+                ":processPlayBinaryJavaScriptAssets",
+                ":processPlayBinaryExtraJavaScript",
                 ":createPlayBinaryJar",
                 ":playBinary")
-        file("build/playBinary/coffeescript/test1.js").exists()
-        file("build/playBinary/coffeescript/xxx/test2.js").exists()
-        file("build/playBinary/coffeescript/a/b/c/test3.js").exists()
-        compareWithoutWhiteSpace file("build/playBinary/coffeescript/test1.js").text, expectedJavaScript()
-        compareWithoutWhiteSpace file("build/playBinary/coffeescript/xxx/test2.js").text, expectedJavaScript()
-        compareWithoutWhiteSpace file("build/playBinary/coffeescript/a/b/c/test3.js").text, expectedJavaScript()
-        jar("build/jars/play/playBinary.jar").containsDescendants(
-                "test1.js",
-                "xxx/test2.js",
-                "a/b/c/test3.js",
-                "test/test4.js",
-                "test5.js"
+        processed("test1.js").exists()
+        processed("ExtraCoffeeScript", "xxx/test2.js").exists()
+        processed("AnotherCoffeeScript", "a/b/c/test3.js").exists()
+        compareWithoutWhiteSpace processed("test1.js").text, expectedJavaScript()
+        compareWithoutWhiteSpace processed("ExtraCoffeeScript", "xxx/test2.js").text, expectedJavaScript()
+        compareWithoutWhiteSpace processed("AnotherCoffeeScript", "a/b/c/test3.js").text, expectedJavaScript()
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "public/test1.js",
+                "public/xxx/test2.js",
+                "public/a/b/c/test3.js",
+                "public/test/test4.js",
+                "public/test5.js"
         )
+    }
+
+    def "does not recompile when inputs and outputs are unchanged" () {
+        given:
+        withCoffeeScriptSource(assets("test.coffee"))
+        succeeds "assemble"
 
         when:
         succeeds "assemble"
 
         then:
-        skipped(":compilePlayBinaryPlayCoffeeScriptSources",
-                ":compilePlayBinaryPlayExtraCoffeeScript",
-                ":compilePlayBinaryPlayAnotherCoffeeScript",
-                ":processPlayBinaryPlayExtraJavaScript",
-                ":processPlayBinaryPlayJavaScriptSources",
-                ":processPlayBinaryPlayCoffeeScriptGenerated",
+        skipped(":compilePlayBinaryCoffeeScriptAssets",
+                ":processPlayBinaryCoffeeScriptAssets",
                 ":createPlayBinaryJar",
                 ":playBinary")
     }
 
+    def "recompiles when inputs are changed" () {
+        given:
+        withCoffeeScriptSource(assets("test.coffee"))
+        succeeds "assemble"
+
+        when:
+        assets("test.coffee") << '\nalert "this is a change!"'
+        succeeds "assemble"
+
+        then:
+        executedAndNotSkipped(
+                ":compilePlayBinaryCoffeeScriptAssets",
+                ":processPlayBinaryCoffeeScriptAssets",
+                ":createPlayBinaryJar",
+                ":playBinary")
+    }
+
+    def "recompiles when outputs are removed" () {
+        given:
+        withCoffeeScriptSource(assets("test.coffee"))
+        succeeds "assemble"
+
+        when:
+        processed("test.js").delete()
+        processedJS("test.js").delete()
+        file("build/playBinary/lib/play.jar").delete()
+        succeeds "assemble"
+
+        then:
+        executedAndNotSkipped(
+                ":compilePlayBinaryCoffeeScriptAssets",
+                ":processPlayBinaryCoffeeScriptAssets",
+                ":createPlayBinaryJar",
+                ":playBinary")
+        processed("test.js").exists()
+    }
+
+    def "cleans removed source file on compile" () {
+        given:
+        withCoffeeScriptSource(assets("test1.coffee"))
+        def source2 = withCoffeeScriptSource(assets("test2.coffee"))
+
+        when:
+        succeeds "assemble"
+
+        then:
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "public/test1.js",
+                "public/test2.js"
+        )
+
+        when:
+        source2.delete()
+        succeeds "assemble"
+
+        then:
+        ! processed("test2.js").exists()
+        ! processedJS("test2.js").exists()
+        jar("build/playBinary/lib/play.jar").countFiles("public/test2.js") == 0
+    }
+
+    def "produces sensible error on compile failure" () {
+        given:
+        assets("test1.coffee") << "if"
+
+        when:
+        fails "assemble"
+
+        then:
+        failure.assertHasDescription "Execution failed for task ':compilePlayBinaryCoffeeScriptAssets'."
+        failure.assertHasCause "Failed to compile coffeescript file: test1.coffee"
+        failure.assertHasCause "SyntaxError: unexpected if (coffee-script-js-1.8.0.js#10)"
+    }
+
     JarTestFixture jar(String fileName) {
         new JarTestFixture(file(fileName))
+    }
+
+    TestFile processed(String sourceSet = "CoffeeScriptAssets", String fileName) {
+        file("build/playBinary/src/compilePlayBinary${sourceSet}/${fileName}")
+    }
+
+    TestFile processedJS(String fileName) {
+        file("build/playBinary/src/processPlayBinaryCoffeeScriptAssets/${fileName}")
+    }
+
+    TestFile assets(String fileName) {
+        file("app/assets/${fileName}")
     }
 
     boolean compareWithoutWhiteSpace(String string1, String string2) {
@@ -174,8 +227,24 @@ class CoffeeScriptCompileIntegrationTest extends AbstractIntegrationSpec {
         return string.replaceAll("\\s+", " ");
     }
 
+    def withJavaScriptSource(String path) {
+        withJavaScriptSource(file(path))
+    }
+
+    def withJavaScriptSource(File file) {
+        file << expectedJavaScript()
+    }
+
     def withCoffeeScriptSource(String path) {
-        return file(path) << """
+        withCoffeeScriptSource(file(path))
+    }
+
+    def withCoffeeScriptSource(File file) {
+        file << coffeeScriptSource()
+    }
+
+    def coffeeScriptSource() {
+        return """
 # Assignment:
 number   = 42
 opposite = true

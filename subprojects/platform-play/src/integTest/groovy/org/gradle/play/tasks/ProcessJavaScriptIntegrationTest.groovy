@@ -19,7 +19,6 @@ package org.gradle.play.tasks
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.archive.JarTestFixture
 
-
 class ProcessJavaScriptIntegrationTest extends AbstractIntegrationSpec {
     def setup() {
         buildFile << """
@@ -40,19 +39,19 @@ class ProcessJavaScriptIntegrationTest extends AbstractIntegrationSpec {
 
     def "processes default javascript source set as part of play application build"() {
         given:
-        file("app/test.js") << "alert('this is a test!');"
+        file("app/assets/test.js") << "alert('this is a test!');"
 
         when:
         succeeds "assemble"
 
         then:
         executedAndNotSkipped(
-                ":processPlayBinaryPlayJavaScriptSources",
+                ":processPlayBinaryJavaScriptAssets",
                 ":createPlayBinaryJar",
                 ":playBinary")
-        file("build/playBinary/javascript/test.js").exists()
-        jar("build/jars/play/playBinary.jar").containsDescendants(
-                "test.js"
+        processed("test.js").exists()
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "public/test.js"
         )
 
         // Up-to-date works
@@ -60,37 +59,38 @@ class ProcessJavaScriptIntegrationTest extends AbstractIntegrationSpec {
         succeeds "assemble"
 
         then:
-        skipped(":processPlayBinaryPlayJavaScriptSources",
+        skipped(":processPlayBinaryJavaScriptAssets",
                 ":createPlayBinaryJar",
                 ":playBinary")
 
         // Detects missing output
         when:
-        file("build/playBinary/javascript/test.js").delete()
-        file("build/jars/play/playBinary.jar").delete()
+        processed("test.js").delete()
+        file("build/playBinary/lib/play.jar").delete()
         succeeds "assemble"
 
         then:
         executedAndNotSkipped(
-                ":processPlayBinaryPlayJavaScriptSources",
+                ":processPlayBinaryJavaScriptAssets",
                 ":createPlayBinaryJar",
                 ":playBinary")
-        file("build/playBinary/javascript/test.js").exists()
+        processed("test.js").exists()
 
         // Detects changed input
         when:
-        file("app/test.js") << "alert('this is a change!');"
+        file("app/assets/test.js") << "alert('this is a change!');"
         succeeds "assemble"
 
         then:
-        executedAndNotSkipped(":processPlayBinaryPlayJavaScriptSources",
-                 ":createPlayBinaryJar",
-                 ":playBinary")
+        executedAndNotSkipped(
+                ":processPlayBinaryJavaScriptAssets",
+                ":createPlayBinaryJar",
+                ":playBinary")
     }
 
     def "processes multiple javascript source sets as part of play application build" () {
         given:
-        file("app/test1.js") << "alert('this is a test!');"
+        file("app/assets/test1.js") << "alert('this is a test!');"
         file("extra/javascripts/test2.js") << "alert('this is a test!');"
         file("src/play/anotherJavaScript/a/b/c/test3.js") << "alert('this is a test!');"
 
@@ -114,32 +114,36 @@ class ProcessJavaScriptIntegrationTest extends AbstractIntegrationSpec {
 
         then:
         executedAndNotSkipped(
-                ":processPlayBinaryPlayJavaScriptSources",
-                ":processPlayBinaryPlayExtraJavaScript",
-                ":processPlayBinaryPlayAnotherJavaScript",
+                ":processPlayBinaryJavaScriptAssets",
+                ":processPlayBinaryExtraJavaScript",
+                ":processPlayBinaryAnotherJavaScript",
                 ":createPlayBinaryJar",
                 ":playBinary")
-        file("build/playBinary/javascript/test1.js").exists()
-        file("build/playBinary/javascript/javascripts/test2.js").exists()
-        file("build/playBinary/javascript/a/b/c/test3.js").exists()
-        jar("build/jars/play/playBinary.jar").containsDescendants(
-                "test1.js",
-                "javascripts/test2.js",
-                "a/b/c/test3.js"
+        processed("test1.js").exists()
+        processed("ExtraJavaScript", "javascripts/test2.js").exists()
+        processed("AnotherJavaScript", "a/b/c/test3.js").exists()
+        jar("build/playBinary/lib/play.jar").containsDescendants(
+                "public/test1.js",
+                "public/javascripts/test2.js",
+                "public/a/b/c/test3.js"
         )
 
         when:
         succeeds "assemble"
 
         then:
-        skipped(":processPlayBinaryPlayJavaScriptSources",
-                ":processPlayBinaryPlayExtraJavaScript",
-                ":processPlayBinaryPlayAnotherJavaScript",
+        skipped(":processPlayBinaryJavaScriptAssets",
+                ":processPlayBinaryExtraJavaScript",
+                ":processPlayBinaryAnotherJavaScript",
                 ":createPlayBinaryJar",
                 ":playBinary")
     }
 
     JarTestFixture jar(String fileName) {
         new JarTestFixture(file(fileName))
+    }
+
+    File processed(String sourceSet = "JavaScriptAssets", String fileName) {
+        file("build/playBinary/src/processPlayBinary${sourceSet}/${fileName}")
     }
 }

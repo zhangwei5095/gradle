@@ -16,18 +16,24 @@
 
 package org.gradle.integtests
 
+import org.gradle.execution.taskgraph.DefaultTaskExecutionPlan
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import org.gradle.integtests.fixtures.executer.GradleHandle
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
 import spock.lang.IgnoreIf
+import spock.util.concurrent.PollingConditions
 
-@IgnoreIf({GradleContextualExecuter.parallel}) // no point, always runs in parallel
+@IgnoreIf({ GradleContextualExecuter.parallel })
+// no point, always runs in parallel
 class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
 
-    @Rule public final BlockingHttpServer blockingServer = new BlockingHttpServer()
+    @Rule
+    public final BlockingHttpServer blockingServer = new BlockingHttpServer()
 
     def setup() {
+        executer.withArgument("-D${DefaultTaskExecutionPlan.INTRA_PROJECT_TOGGLE}=true")
         blockingServer.start()
 
         settingsFile << 'include "a", "b"'
@@ -82,6 +88,62 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
         executer.withArgument("--parallel-threads=$threadCount")
     }
 
+    def "feature toggle is required for tasks to run in parallel"() {
+        given:
+        executer.withArguments() // clears what was set in setup
+        withParallelThreads(2)
+
+        expect:
+        blockingServer.expectSerialExecution(":aPing")
+        blockingServer.expectSerialExecution(":bPing")
+
+        run ":aPing", ":bPing"
+    }
+
+    def "info is logged when overlapping outputs prevent parallel execution"() {
+        given:
+        executer.withArgument("-i")
+        withParallelThreads(2)
+
+        and:
+        buildFile << """
+            aPing.outputs.file "dir"
+            bPing.outputs.file "dir/file"
+        """
+        expect:
+        GradleHandle handle
+        def handleStarter = {  handle = executer.withTasks(":aPing", ":bPing").start() }
+        blockingServer.expectConcurrentExecution([":aPing"]) {
+            new PollingConditions().eventually {
+                assert handle.standardOutput.contains("Cannot execute task :bPing in parallel with task :aPing due to overlapping output: ${file("dir")}")
+            }
+        }
+        blockingServer.expectSerialExecution(":bPing")
+        handleStarter.call()
+        handle.waitForFinish()
+    }
+
+    def "info is logged when task is prevented from executing in parallel due to custom actions"() {
+        given:
+        executer.withArgument("-i")
+        withParallelThreads(2)
+
+        and:
+        buildFile << """
+            bPing.doLast {}
+        """
+        expect:
+        GradleHandle handle
+        def handleStarter = {  handle = executer.withTasks(":aPing", ":bPing").start() }
+        blockingServer.expectConcurrentExecution([":aPing"]) {
+            new PollingConditions().eventually {
+                assert handle.standardOutput.contains("Unable to parallelize task :bPing due to presence of custom actions (e.g. doFirst()/doLast())")
+            }
+        }
+        blockingServer.expectSerialExecution(":bPing")
+        handleStarter.call()
+        handle.waitForFinish()
+    }
 
     def "two independent parallelizable tasks execute in parallel"() {
         given:

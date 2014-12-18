@@ -25,11 +25,11 @@ class CustomCoffeeScriptImplementationIntegrationTest extends AbstractIntegratio
         customCoffeeScriptImplFileName = 'coffeescript/coffee-script.min.js'
         file(customCoffeeScriptImplFileName) << getClass().getResource("/coffee-script.min.js").text
 
-        file('app/test.coffee') << testCoffeeScript()
+        file('app/assets/test.coffee') << testCoffeeScript()
         file('src/play/extra/test2.coffee') << testCoffeeScript()
         buildFile << """
             plugins {
-                id 'play-application'
+                id 'play'
                 id 'play-coffeescript'
             }
 
@@ -58,13 +58,13 @@ class CustomCoffeeScriptImplementationIntegrationTest extends AbstractIntegratio
         """
 
         when:
-        succeeds "compilePlayBinaryPlayCoffeeScriptSources", "compilePlayBinaryPlayExtra"
+        succeeds "assemble"
 
         then:
-        file('build/playBinary/coffeescript/test.js').exists()
-        file('build/playBinary/coffeescript/test2.js').exists()
-        file('build/playBinary/coffeescript/test.js').text == expectedJavaScript()
-        file('build/playBinary/coffeescript/test2.js').text == expectedJavaScript()
+        file('build/playBinary/src/compilePlayBinaryCoffeeScriptAssets/test.js').exists()
+        file('build/playBinary/src/compilePlayBinaryExtra/test2.js').exists()
+        file('build/playBinary/src/processPlayBinaryCoffeeScriptAssets/test.js').text == expectedJavaScript()
+        file('build/playBinary/src/processPlayBinaryExtra/test2.js').text == expectedJavaScript()
     }
 
     def "can compile coffeescript with a custom implementation from configuration"() {
@@ -94,13 +94,13 @@ class CustomCoffeeScriptImplementationIntegrationTest extends AbstractIntegratio
         """
 
         when:
-        succeeds "compilePlayBinaryPlayCoffeeScriptSources", "compilePlayBinaryPlayExtra"
+        succeeds "assemble"
 
         then:
-        file('build/playBinary/coffeescript/test.js').exists()
-        file('build/playBinary/coffeescript/test2.js').exists()
-        file('build/playBinary/coffeescript/test.js').text == expectedJavaScript()
-        file('build/playBinary/coffeescript/test2.js').text == expectedJavaScript()
+        file('build/playBinary/src/compilePlayBinaryCoffeeScriptAssets/test.js').exists()
+        file('build/playBinary/src/compilePlayBinaryExtra/test2.js').exists()
+        file('build/playBinary/src/processPlayBinaryCoffeeScriptAssets/test.js').text == expectedJavaScript()
+        file('build/playBinary/src/processPlayBinaryExtra/test2.js').text == expectedJavaScript()
     }
 
     String testCoffeeScript() {

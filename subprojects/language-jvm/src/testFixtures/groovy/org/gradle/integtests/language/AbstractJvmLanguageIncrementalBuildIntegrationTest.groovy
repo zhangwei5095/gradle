@@ -18,11 +18,13 @@ package org.gradle.integtests.language
 
 import org.apache.commons.lang.StringUtils
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.integtests.fixtures.jvm.TestJvmComponent
 import org.gradle.test.fixtures.archive.JarTestFixture
 import org.gradle.test.fixtures.file.TestFile
+import spock.lang.IgnoreIf
 
-abstract class AbstractJvmLanguageIncrementalBuildIntegrationTest extends AbstractIntegrationSpec{
+abstract class AbstractJvmLanguageIncrementalBuildIntegrationTest extends AbstractIntegrationSpec {
     abstract TestJvmComponent getTestComponent();
 
     List<TestFile> sourceFiles
@@ -41,7 +43,7 @@ abstract class AbstractJvmLanguageIncrementalBuildIntegrationTest extends Abstra
         id '${testComponent.languageName}-lang'
     }
 
-    repositories{
+    repositories {
         mavenCentral()
     }
 
@@ -64,8 +66,7 @@ abstract class AbstractJvmLanguageIncrementalBuildIntegrationTest extends Abstra
         jarFile("build/jars/mainJar/main.jar").hasDescendants(testComponent.expectedOutputs*.fullPath as String[])
     }
 
-
-
+    @IgnoreIf({GradleContextualExecuter.parallel})
     def "does not re-execute build with no change"() {
         given:
         run "mainJar"

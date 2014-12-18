@@ -17,6 +17,9 @@
 package org.gradle.integtests.resolve
 
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ComponentArtifactsResult
+import org.gradle.api.artifacts.result.ComponentResult
+import org.gradle.api.artifacts.result.UnresolvedComponentResult
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
 import org.gradle.test.fixtures.file.TestFile
 
@@ -26,7 +29,8 @@ class MetadataArtifactResolveTestFixture {
     final ModuleComponentIdentifier id = DefaultModuleComponentIdentifier.newId('some.group', 'some-artifact', '1.0')
     private String requestedComponent
     private String requestedArtifact
-    private String expectedComponentResult
+    private Class<? extends ComponentResult> expectedComponentResult
+    private Throwable expectedException
     private Set<File> expectedMetadataFiles
 
     MetadataArtifactResolveTestFixture(TestFile buildFile, String config = "compile") {
@@ -74,13 +78,19 @@ if (project.hasProperty('nocache')) {
         this
     }
 
-    MetadataArtifactResolveTestFixture expectComponentResult(String componentResult) {
-        this.expectedComponentResult = componentResult
+    MetadataArtifactResolveTestFixture expectResolvedComponentResult() {
+        this.expectedComponentResult = ComponentArtifactsResult
         this
     }
 
-    MetadataArtifactResolveTestFixture expectMetadataFiles(Set<File> metadataFiles) {
-        this.expectedMetadataFiles = metadataFiles
+    MetadataArtifactResolveTestFixture expectUnresolvedComponentResult(Throwable expectedException) {
+        this.expectedComponentResult = UnresolvedComponentResult
+        this.expectedException = expectedException
+        this
+    }
+
+    MetadataArtifactResolveTestFixture expectMetadataFiles(File... metadataFiles) {
+        this.expectedMetadataFiles = metadataFiles as Set
         this
     }
 
@@ -99,21 +109,47 @@ task verify {
 
         assert result.components.size() == 1
 
-        // Check generic component result
-        def componentResult = result.components.iterator().next()
-        assert componentResult.id.displayName == '$id.displayName'
-        assert componentResult instanceof $expectedComponentResult
+        ${createComponentResultVerificationCode()}
+"""
 
-        Set<File> resultArtifactFiles = result.artifactFiles
-        assert resultArtifactFiles.size() == ${expectedMetadataFiles.size()}
+        if(expectedComponentResult == UnresolvedComponentResult) {
+            buildFile << createUnresolvedComponentResultVerificationCode()
+        }
 
-        def resolvedArtifactFileNames = resultArtifactFiles.collect { it.name } as Set
+        buildFile << """
         def expectedMetadataFileNames = ${expectedMetadataFiles.collect { "'" + it.name + "'" }} as Set
-        assert resolvedArtifactFileNames == expectedMetadataFileNames
+
+        for(component in result.resolvedComponents) {
+            def resolvedArtifacts = component.getArtifacts($requestedArtifact).findAll { it instanceof ResolvedArtifactResult }
+            assert expectedMetadataFileNames.size() == resolvedArtifacts.size()
+
+            if(expectedMetadataFileNames.size() > 0) {
+                def resolvedArtifactFileNames = resolvedArtifacts*.file.name as Set
+                assert resolvedArtifactFileNames == expectedMetadataFileNames
+            }
+        }
     }
 }
 """
     }
+
+    private String createComponentResultVerificationCode() {
+        """
+        // Check generic component result
+        def componentResult = result.components.iterator().next()
+        assert componentResult.id.displayName == '$id.displayName'
+        assert componentResult instanceof $expectedComponentResult.name
+"""
+    }
+
+    private String createUnresolvedComponentResultVerificationCode() {
+        """
+        // Check unresolved component result
+        UnresolvedComponentResult unresolvedComponentResult = (UnresolvedComponentResult)componentResult
+        assert unresolvedComponentResult.failure instanceof ${expectedException.getClass().name}
+        assert unresolvedComponentResult.failure.message == "$expectedException.message"
+"""
+}
 
     void createVerifyTaskForProjectComponentIdentifier() {
         buildFile << """
@@ -126,23 +162,6 @@ task verify {
             .forComponents(rootId)
             .withArtifacts($requestedComponent, $requestedArtifact)
             .execute()
-    }
-}
-"""
-    }
-
-    void createVerifyTaskForDuplicateCallToWithArtifacts() {
-        buildFile << """
-task verify {
-    doLast {
-        def deps = configurations.${config}.incoming.resolutionResult.allDependencies as List
-        assert deps.size() == 1
-        def componentId = deps[0].selected.id
-
-        dependencies.createArtifactResolutionQuery()
-            .forComponents(deps[0].selected.id)
-            .withArtifacts($requestedComponent, $requestedArtifact)
-            .withArtifacts($requestedComponent, $requestedArtifact)
     }
 }
 """
