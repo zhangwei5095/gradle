@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 the original author or authors.
+ * Copyright 2012 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,8 @@
  * limitations under the License.
  */
 
-package org.gradle.platform.base;
+package org.gradle.performance.fixture
 
-import org.gradle.api.GradleException;
-
-/**
- * Thrown when a component model is declared in an invalid way.
- */
-public class InvalidComponentModelException extends GradleException {
-    public InvalidComponentModelException(String message) {
-        super(message);
-    }
-
-    public InvalidComponentModelException(String message, Exception cause) {
-        super(message, cause);
-    }
+interface CrossVersionDataReporter {
+    void report(CrossVersionPerformanceResults results)
 }

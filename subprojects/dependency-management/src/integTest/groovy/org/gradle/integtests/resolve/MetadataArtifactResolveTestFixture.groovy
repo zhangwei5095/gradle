@@ -40,11 +40,6 @@ class MetadataArtifactResolveTestFixture {
 
     void basicSetup() {
         buildFile << """
-import org.gradle.ivy.IvyModule
-import org.gradle.ivy.IvyDescriptorArtifact
-import org.gradle.maven.MavenModule
-import org.gradle.maven.MavenPomArtifact
-
 configurations {
     $config
 }
@@ -94,8 +89,8 @@ if (project.hasProperty('nocache')) {
         this
     }
 
-    MetadataArtifactResolveTestFixture expectMetadataFiles(Set<File> metadataFiles) {
-        this.expectedMetadataFiles = metadataFiles
+    MetadataArtifactResolveTestFixture expectMetadataFiles(File... metadataFiles) {
+        this.expectedMetadataFiles = metadataFiles as Set
         this
     }
 

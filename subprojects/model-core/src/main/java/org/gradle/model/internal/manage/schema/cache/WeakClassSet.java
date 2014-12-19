@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 the original author or authors.
+ * Copyright 2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,23 @@
  * limitations under the License.
  */
 
-package org.gradle.performance.fixture
+package org.gradle.model.internal.manage.schema.cache;
 
-interface DataReporter {
-    void report(PerformanceResults results)
+import org.gradle.model.internal.type.ModelType;
+
+import java.util.List;
+
+abstract class WeakClassSet {
+
+    static WeakClassSet of(ModelType<?> type) {
+        List<Class<?>> allClasses = type.getAllClasses();
+        if (allClasses.size() == 1) {
+            return new SingleWeakClassSet(allClasses.iterator().next());
+        } else {
+            return new MultiWeakClassSet(allClasses);
+        }
+    }
+
+    abstract boolean isCollected();
+
 }
