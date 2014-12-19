@@ -87,9 +87,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
         this.cancellationToken = cancellationToken;
         this.intraProjectParallelization = intraProjectParallelization;
 
-        if (intraProjectParallelization) {
-            LOGGER.lifecycle("intra project task parallelization is enabled");
-        }
+        LOGGER.lifecycle(" *** intra project task parallelization: " + intraProjectParallelization);
     }
 
     public DefaultTaskExecutionPlan(BuildCancellationToken cancellationToken) {
