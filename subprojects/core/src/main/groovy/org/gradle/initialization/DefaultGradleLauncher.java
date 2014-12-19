@@ -123,7 +123,9 @@ public class DefaultGradleLauncher extends GradleLauncher {
 
         // Load build
         buildLoader.load(settings.getRootProject(), settings.getDefaultProject(), gradle, settings.getRootClassLoaderScope());
-        buildListener.projectsLoaded(gradle);
+        if (!gradle.getDefaultProject().getExtensions().getExtraProperties().has("static.cached")) {
+            buildListener.projectsLoaded(gradle);
+        }
 
         // Configure build
         buildConfigurer.configure(gradle);
@@ -189,7 +191,7 @@ public class DefaultGradleLauncher extends GradleLauncher {
     public void stop() {
         try {
             loggingManager.stop();
-            CompositeStoppable.stoppable(buildServices).stop();
+//            CompositeStoppable.stoppable(buildServices).stop();
         } finally {
             buildCompletionListener.completed();
         }

@@ -35,15 +35,22 @@ class CachedModelIntegrationTest extends AbstractIntegrationSpec {
     def "java project"() {
         buildFile << """
             apply plugin: 'java'
+            gradle.projectsLoaded { println 'loaded!!!' }
+            repositories { jcenter() }
+
+            task a << {
+                def c = configurations.detachedConfiguration(dependencies.create('org.objenesis:objenesis:2.1'))
+                println c.singleFile
+            }
         """
 
         file("src/main/java/Foo.java") << "public class Foo {}"
 
         expect:
-        run()
-        run()
-        run()
-        run()
-        run()
+        run("a")
+        run("a")
+        run("a")
+        run("a")
+        run("a")
     }
 }

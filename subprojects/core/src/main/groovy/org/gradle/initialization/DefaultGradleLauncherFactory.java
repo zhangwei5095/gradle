@@ -105,7 +105,7 @@ public class DefaultGradleLauncherFactory implements GradleLauncherFactory {
         }
         listenerManager.addListener(tracker);
 
-        listenerManager.addListener(serviceRegistry.get(ProfileEventAdapter.class));
+        //listenerManager.addListener(serviceRegistry.get(ProfileEventAdapter.class));
         if (startParameter.isProfile()) {
             listenerManager.addListener(new ReportGeneratingProfileListener());
         }

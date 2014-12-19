@@ -51,7 +51,9 @@ public class BuildProgressLogger implements LoggerProvider {
     }
 
     public void graphPopulated(int totalTasks) {
-        configurationProgress.completed();
+        if (configurationProgress != null) {
+            configurationProgress.completed();
+        }
         configurationProgress = null;
 
         buildProgress.completed("Task graph ready");
