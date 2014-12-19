@@ -109,8 +109,16 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new TrueTimeProvider();
     }
 
+    private final static ProjectRegistry<ProjectInternal> projectRegistry = new DefaultProjectRegistry<ProjectInternal>();
+
     protected ProjectRegistry<ProjectInternal> createProjectRegistry() {
-        return new DefaultProjectRegistry<ProjectInternal>();
+        boolean cachedModel = System.getProperty("cache.model") != null;
+        System.out.println("*** cached model: " + cachedModel);
+        if (cachedModel) {
+            return projectRegistry;
+        } else {
+            return new DefaultProjectRegistry<ProjectInternal>();
+        }
     }
 
     protected IProjectFactory createProjectFactory(Instantiator instantiator, ProjectRegistry<ProjectInternal> projectRegistry) {

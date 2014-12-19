@@ -489,6 +489,9 @@ public abstract class AbstractProject extends AbstractPluginAware implements Pro
     }
 
     public AbstractProject evaluate() {
+        if (this.getExtensions().getExtraProperties().has("static.cached")) {
+            return this;
+        }
         getProjectEvaluator().evaluate(this, state);
         state.rethrowFailure();
         return this;

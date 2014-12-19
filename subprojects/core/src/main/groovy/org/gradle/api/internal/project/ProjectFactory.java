@@ -36,6 +36,11 @@ public class ProjectFactory implements IProjectFactory {
     }
 
     public DefaultProject createProject(ProjectDescriptor projectDescriptor, ProjectInternal parent, GradleInternal gradle, ClassLoaderScope selfClassLoaderScope, ClassLoaderScope baseClassLoaderScope) {
+        DefaultProject existing = (DefaultProject) projectRegistry.getProject(projectDescriptor.getProjectDir());
+        if (existing != null) {
+            existing.getExtensions().getExtraProperties().set("static.cached", "");
+            return existing;
+        }
         File buildFile = projectDescriptor.getBuildFile();
         ScriptSource source;
         if (!buildFile.exists()) {
