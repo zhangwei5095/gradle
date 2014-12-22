@@ -52,6 +52,15 @@ public class TaskStateInternal implements TaskState {
         this.executed = true;
     }
 
+    public void reset() {
+        executing = false;
+        executed = false;
+        didWork = false;
+        failure = null;
+        skippedMessage = null;
+        skipped = false;
+    }
+
     public boolean isConfigurable(){
         return !executed && !executing;
     }

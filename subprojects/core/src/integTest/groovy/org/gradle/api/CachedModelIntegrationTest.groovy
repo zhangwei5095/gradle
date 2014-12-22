@@ -42,15 +42,24 @@ class CachedModelIntegrationTest extends AbstractIntegrationSpec {
                 def c = configurations.detachedConfiguration(dependencies.create('org.objenesis:objenesis:2.1'))
                 println c.singleFile
             }
+
+            defaultTasks 'a', 'build'
         """
 
         file("src/main/java/Foo.java") << "public class Foo {}"
 
         expect:
-        run("a")
-        run("a")
-        run("a")
-        run("a")
-        run("a")
+        runNow()
+        runNow()
+        runNow()
+        runNow()
+        runNow()
+    }
+
+    void runNow() {
+        run("a", "clean")
+        assert !file("build").exists()
+        run("build")
+        assert file("build/classes/main/Foo.class").exists()
     }
 }

@@ -23,7 +23,6 @@ import org.gradle.api.internal.SettingsInternal;
 import org.gradle.api.logging.StandardOutputListener;
 import org.gradle.configuration.BuildConfigurer;
 import org.gradle.execution.BuildExecuter;
-import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.logging.LoggingManagerInternal;
 
 import java.io.Closeable;
@@ -116,6 +115,8 @@ public class DefaultGradleLauncher extends GradleLauncher {
     private void doBuildStages(Stage upTo) {
         // Evaluate init scripts
         initScriptHandler.executeScripts(gradle);
+
+        gradle.addBuildListener(new StatusResetter());
 
         // Evaluate settings script
         SettingsInternal settings = settingsHandler.findAndLoadSettings(gradle);
