@@ -37,8 +37,10 @@ public class StatusResetter extends BuildAdapter implements TaskExecutionGraphLi
     }
 
     public void buildFinished(BuildResult result) {
-        for (AbstractTask task : tasks) {
-            task.getState().reset();
+        if (tasks != null) {
+            for (AbstractTask task : tasks) {
+                task.getState().reset();
+            }
         }
         tasks = null;
     }
