@@ -72,6 +72,7 @@ class UserGuideSamplesRunner extends Runner {
 
     private Pattern initDirFilterPattern() {
         String filter = System.properties["org.gradle.userguide.samples.filter"]
+        filter = "(ivy|maven).*"
         filter ? Pattern.compile(filter) : null
     }
 
