@@ -17,6 +17,8 @@
 package org.gradle.internal.service.scopes;
 
 import com.google.common.collect.Iterables;
+import groovy.lang.CustomMetaClassCreationHandle;
+import groovy.lang.GroovySystem;
 import org.gradle.StartParameter;
 import org.gradle.api.internal.*;
 import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter;
@@ -81,6 +83,7 @@ public class GlobalScopeServices {
                 return longLiving;
             }
         };
+        GroovySystem.getMetaClassRegistry().setMetaClassCreationHandle(new CustomMetaClassCreationHandle());
     }
 
     void configure(ServiceRegistration registration, ClassLoaderRegistry classLoaderRegistry) {
