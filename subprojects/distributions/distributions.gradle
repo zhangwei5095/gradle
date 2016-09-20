@@ -60,9 +60,6 @@ ext {
         into('lib') {
             from rootProject.configurations.runtime
             into('plugins') {
-                into('sonar') {
-                    from rootProject.configurations.sonar - rootProject.configurations.runtime
-                }
                 from rootProject.configurations.gradlePlugins - rootProject.configurations.runtime
             }
         }
@@ -132,5 +129,9 @@ artifacts {
 }
 
 integTest {
+    inputs.files allZip, binZip, srcZip
+}
+
+java9IntegTest {
     inputs.files allZip, binZip, srcZip
 }

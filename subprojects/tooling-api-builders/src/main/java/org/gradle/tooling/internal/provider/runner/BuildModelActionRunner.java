@@ -20,7 +20,6 @@ import org.gradle.api.Project;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.execution.ProjectConfigurer;
-import org.gradle.initialization.BuildEventConsumer;
 import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.invocation.BuildActionRunner;
 import org.gradle.internal.invocation.BuildController;
@@ -28,7 +27,7 @@ import org.gradle.tooling.internal.protocol.InternalUnsupportedModelException;
 import org.gradle.tooling.internal.provider.BuildActionResult;
 import org.gradle.tooling.internal.provider.BuildModelAction;
 import org.gradle.tooling.internal.provider.PayloadSerializer;
-import org.gradle.tooling.model.internal.ProjectSensitiveToolingModelBuilder;
+import org.gradle.tooling.provider.model.internal.ProjectSensitiveToolingModelBuilder;
 import org.gradle.tooling.provider.model.ToolingModelBuilder;
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry;
 import org.gradle.tooling.provider.model.UnknownModelException;
@@ -42,13 +41,6 @@ public class BuildModelActionRunner implements BuildActionRunner {
 
         BuildModelAction buildModelAction = (BuildModelAction) action;
         GradleInternal gradle = buildController.getGradle();
-
-        // register a TestListener that dispatches all test progress via the registered BuildEventConsumer instance,
-        // this allows to send test progress events back to the DaemonClient (via short-cut)
-        if (buildModelAction.isSendTestProgressEvents()) {
-            BuildEventConsumer eventConsumer = gradle.getServices().get(BuildEventConsumer.class);
-            gradle.addListener(new ClientForwardingTestListener(eventConsumer));
-        }
 
         if (buildModelAction.isRunTasks()) {
             buildController.run();
@@ -72,6 +64,11 @@ public class BuildModelActionRunner implements BuildActionRunner {
             throw (InternalUnsupportedModelException) new InternalUnsupportedModelException().initCause(e);
         }
 
+        Object modelResult = createModelResult(gradle, modelName, builder);
+        buildController.setResult(modelResult);
+    }
+
+    protected Object createModelResult(GradleInternal gradle, String modelName, ToolingModelBuilder builder) {
         Object result;
         if (builder instanceof ProjectSensitiveToolingModelBuilder) {
             result = ((ProjectSensitiveToolingModelBuilder) builder).buildAll(modelName, gradle.getDefaultProject(), true);
@@ -80,8 +77,7 @@ public class BuildModelActionRunner implements BuildActionRunner {
         }
 
         PayloadSerializer payloadSerializer = gradle.getServices().get(PayloadSerializer.class);
-        BuildActionResult buildActionResult = new BuildActionResult(payloadSerializer.serialize(result), null);
-        buildController.setResult(buildActionResult);
+        return new BuildActionResult(payloadSerializer.serialize(result), null);
     }
 
     private ToolingModelBuilderRegistry getToolingModelBuilderRegistry(GradleInternal gradle) {

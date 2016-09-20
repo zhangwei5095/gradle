@@ -38,8 +38,14 @@ abstract class JavaCompilerIntegrationSpec extends BasicJavaCompilerIntegrationS
             }
 
             def createJarFile(String libraryPath) {
-                new java.util.jar.JarOutputStream(new FileOutputStream(file(libraryPath)), new java.util.jar.Manifest()).withStream {
-                    libraryPath
+                def fos
+                try {
+                    fos = new FileOutputStream(file(libraryPath))
+                    new java.util.jar.JarOutputStream(fos, new java.util.jar.Manifest()).withStream {
+                        libraryPath
+                    }
+                } finally {
+                    fos?.close()
                 }
             }
         '''

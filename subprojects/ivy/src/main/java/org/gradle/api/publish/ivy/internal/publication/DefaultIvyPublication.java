@@ -18,15 +18,18 @@ package org.gradle.api.publish.ivy.internal.publication;
 
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
+import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.DependencyArtifact;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
 import org.gradle.api.internal.component.SoftwareComponentInternal;
 import org.gradle.api.internal.component.Usage;
+import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.api.internal.file.UnionFileCollection;
 import org.gradle.internal.typeconversion.NotationParser;
 import org.gradle.api.publish.internal.ProjectDependencyPublicationResolver;
@@ -42,6 +45,7 @@ import org.gradle.api.publish.ivy.internal.publisher.IvyPublicationIdentity;
 import org.gradle.internal.reflect.Instantiator;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.Set;
 
 public class DefaultIvyPublication implements IvyPublicationInternal {
@@ -58,13 +62,13 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
 
     public DefaultIvyPublication(
             String name, Instantiator instantiator, IvyPublicationIdentity publicationIdentity, NotationParser<Object, IvyArtifact> ivyArtifactNotationParser,
-            ProjectDependencyPublicationResolver projectDependencyResolver
+            ProjectDependencyPublicationResolver projectDependencyResolver, FileCollectionFactory fileCollectionFactory
     ) {
         this.name = name;
         this.publicationIdentity = publicationIdentity;
         this.projectDependencyResolver = projectDependencyResolver;
         configurations = instantiator.newInstance(DefaultIvyConfigurationContainer.class, instantiator);
-        ivyArtifacts = instantiator.newInstance(DefaultIvyArtifactSet.class, name, ivyArtifactNotationParser);
+        ivyArtifacts = instantiator.newInstance(DefaultIvyArtifactSet.class, name, ivyArtifactNotationParser, fileCollectionFactory);
         ivyDependencies = instantiator.newInstance(DefaultIvyDependencySet.class);
         descriptor = instantiator.newInstance(DefaultIvyModuleDescriptorSpec.class, this);
     }
@@ -104,7 +108,7 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
 
             for (ModuleDependency dependency : usage.getDependencies()) {
                 // TODO: When we support multiple components or configurable dependencies, we'll need to merge the confs of multiple dependencies with same id.
-                String confMapping = String.format("%s->%s", conf, dependency.getConfiguration());
+                String confMapping = String.format("%s->%s", conf, dependency.getTargetConfiguration().or(Dependency.DEFAULT_CONFIGURATION));
                 if (dependency instanceof ProjectDependency) {
                     addProjectDependency((ProjectDependency) dependency, confMapping);
                 } else {
@@ -116,12 +120,13 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
 
     private void addProjectDependency(ProjectDependency dependency, String confMapping) {
         ModuleVersionIdentifier identifier = projectDependencyResolver.resolve(dependency);
-        ivyDependencies.add(new DefaultIvyDependency(identifier.getGroup(), identifier.getName(), identifier.getVersion(), confMapping));
+        ivyDependencies.add(new DefaultIvyDependency(
+                identifier.getGroup(), identifier.getName(), identifier.getVersion(), confMapping, dependency.isTransitive(), Collections.<DependencyArtifact>emptyList(), dependency.getExcludeRules()));
     }
 
     private void addModuleDependency(ModuleDependency dependency, String confMapping) {
-        ivyDependencies.add(new DefaultIvyDependency(dependency.getGroup(), dependency.getName(), dependency.getVersion(), confMapping, dependency.getArtifacts()));
-     }
+        ivyDependencies.add(new DefaultIvyDependency(dependency, confMapping));
+    }
 
     public void configurations(Action<? super IvyConfigurationContainer> config) {
         config.execute(configurations);

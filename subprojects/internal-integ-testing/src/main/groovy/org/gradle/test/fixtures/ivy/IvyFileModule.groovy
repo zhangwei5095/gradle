@@ -19,6 +19,7 @@ import groovy.xml.MarkupBuilder
 import org.gradle.api.Action
 import org.gradle.internal.xml.XmlTransformer
 import org.gradle.test.fixtures.AbstractModule
+import org.gradle.test.fixtures.Module
 import org.gradle.test.fixtures.file.TestFile
 
 class IvyFileModule extends AbstractModule implements IvyModule {
@@ -51,6 +52,16 @@ class IvyFileModule extends AbstractModule implements IvyModule {
         this.m2Compatible = m2Compatible
         configurations['runtime'] = [extendsFrom: [], transitive: true, visibility: 'public']
         configurations['default'] = [extendsFrom: ['runtime'], transitive: true, visibility: 'public']
+    }
+
+    @Override
+    String getGroup() {
+        return organisation
+    }
+
+    @Override
+    String getVersion() {
+        return revision
     }
 
     IvyDescriptor getParsedIvy() {
@@ -93,8 +104,22 @@ class IvyFileModule extends AbstractModule implements IvyModule {
         return this
     }
 
+    @Override
+    IvyFileModule dependsOn(Map<String, ?> attributes, Module target) {
+        def allAttrs = [organisation: target.group, module: target.module, revision: target.version]
+        allAttrs.putAll(attributes)
+        dependsOn(allAttrs)
+        return this
+    }
+
     IvyFileModule dependsOn(Map<String, ?> attributes) {
         dependencies << attributes
+        return this
+    }
+
+    @Override
+    IvyFileModule dependsOn(Module target) {
+        dependsOn(target.group, target.module, target.version)
         return this
     }
 
@@ -143,7 +168,7 @@ class IvyFileModule extends AbstractModule implements IvyModule {
     }
 
     protected String getIvyFilePath() {
-        getArtifactFilePath(name: "ivy", type: "ivy", ext: "xml")
+        getArtifactFilePath([name: "ivy", type: "ivy", ext: "xml"], ivyPattern)
     }
 
     TestFile getIvyFile() {
@@ -162,10 +187,10 @@ class IvyFileModule extends AbstractModule implements IvyModule {
         return moduleDir.file(getArtifactFilePath(options))
     }
 
-    protected String getArtifactFilePath(Map<String, ?> options) {
+    protected String getArtifactFilePath(Map<String, ?> options, String pattern = artifactPattern) {
         def artifact = toArtifact(options)
         def tokens = [organisation: organisation, module: module, revision: revision, artifact: artifact.name, type: artifact.type, ext: artifact.ext, classifier: artifact.classifier]
-        M2CompatibleIvyPatternHelper.substitute(artifactPattern, m2Compatible, tokens)
+        M2CompatibleIvyPatternHelper.substitute(pattern, m2Compatible, tokens)
     }
 
     /**

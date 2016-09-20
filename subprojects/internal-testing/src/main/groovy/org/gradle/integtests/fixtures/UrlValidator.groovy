@@ -17,24 +17,21 @@
 package org.gradle.integtests.fixtures
 
 import org.gradle.internal.hash.HashUtil
+import org.gradle.test.fixtures.ConcurrentTestUtil
 import org.gradle.util.TextUtil
 import org.junit.Assert
 
 class UrlValidator {
 
-    static void available(String theUrl, String application = null, int timeout = 30000) {
+    static void available(String theUrl, String application = "service", int timeout = 30) {
         URL url = new URL(theUrl)
-        long expiry = System.currentTimeMillis() + timeout
-        while (System.currentTimeMillis() <= expiry) {
-            try {
-                url.text
-                return
-            } catch (IOException e) {
-                // continue
+        try {
+            ConcurrentTestUtil.poll(timeout) {
+                assertUrlIsAvailable(url)
             }
-            Thread.sleep(200)
+        } catch(Throwable t) {
+            throw new RuntimeException(String.format("Timeout waiting for %s to become available at [%s].", application, theUrl), t);
         }
-        throw new RuntimeException(String.format("Timeout waiting for %s to become available.", application != null ? application : theUrl));
     }
 
     static void notAvailable(String theUrl) {
@@ -43,6 +40,11 @@ class UrlValidator {
             Assert.fail(String.format("Expected url '%s' to be unavailable instead we got:\n%s", theUrl, content));
         } catch (SocketException ex) {
         }
+    }
+
+    // Throws IOException if URL is unavailable
+    private static assertUrlIsAvailable(URL url) {
+        assert url.text != null
     }
 
     /**

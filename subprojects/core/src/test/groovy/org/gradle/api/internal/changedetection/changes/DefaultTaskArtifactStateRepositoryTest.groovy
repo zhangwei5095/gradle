@@ -19,64 +19,74 @@ package org.gradle.api.internal.changedetection.changes
 import org.gradle.api.Action
 import org.gradle.api.DefaultTask
 import org.gradle.api.internal.TaskInternal
+import org.gradle.api.internal.cache.StringInterner
 import org.gradle.api.internal.changedetection.TaskArtifactState
-import org.gradle.api.internal.changedetection.state.*
+import org.gradle.api.internal.changedetection.state.CacheBackedFileSnapshotRepository
+import org.gradle.api.internal.changedetection.state.CacheBackedTaskHistoryRepository
+import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter
+import org.gradle.api.internal.changedetection.state.DefaultFileCollectionSnapshotter
+import org.gradle.api.internal.changedetection.state.DefaultTaskArtifactStateCacheAccess
+import org.gradle.api.internal.changedetection.state.FileCollectionSnapshot
+import org.gradle.api.internal.changedetection.state.FileCollectionSnapshotter
+import org.gradle.api.internal.changedetection.state.NoOpDecorator
+import org.gradle.api.internal.changedetection.state.OutputFilesCollectionSnapshotter
+import org.gradle.api.internal.changedetection.state.TaskArtifactStateCacheAccess
+import org.gradle.api.internal.changedetection.state.TaskHistoryRepository
+import org.gradle.api.internal.file.TestFiles
 import org.gradle.api.internal.hash.DefaultHasher
 import org.gradle.api.tasks.incremental.InputFileDetails
 import org.gradle.cache.CacheRepository
 import org.gradle.cache.internal.CacheScopeMapping
 import org.gradle.cache.internal.DefaultCacheRepository
+import org.gradle.internal.classloader.ConfigurableClassLoaderHierarchyHasher
 import org.gradle.internal.id.RandomLongIdGenerator
 import org.gradle.internal.reflect.DirectInstantiator
 import org.gradle.internal.serialize.DefaultSerializerRegistry
 import org.gradle.internal.serialize.SerializerRegistry
+import org.gradle.test.fixtures.AbstractProjectBuilderSpec
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.testfixtures.internal.InMemoryCacheFactory
 import org.gradle.util.TestUtil
-import org.junit.Rule
-import spock.lang.Specification
 
-import static org.gradle.util.WrapUtil.toMap
-import static org.gradle.util.WrapUtil.toSet
-
-public class DefaultTaskArtifactStateRepositoryTest extends Specification {
-    
-    @Rule
-    public TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider()
-    final project = TestUtil.createRootProject()
-    final gradle = project.getGradle()
-    final outputFile = tmpDir.file("output-file")
-    final outputDir = tmpDir.file("output-dir")
+public class DefaultTaskArtifactStateRepositoryTest extends AbstractProjectBuilderSpec {
+    def gradle
+    final outputFile = temporaryFolder.file("output-file")
+    final outputDir = temporaryFolder.file("output-dir")
     final outputDirFile = outputDir.file("some-file")
     final outputDirFile2 = outputDir.file("some-file-2")
-    final emptyOutputDir = tmpDir.file("empty-output-dir")
-    final missingOutputFile = tmpDir.file("missing-output-file")
-    final inputFile = tmpDir.createFile("input-file")
-    final inputDir = tmpDir.createDir("input-dir")
+    final emptyOutputDir = temporaryFolder.file("empty-output-dir")
+    final missingOutputFile = temporaryFolder.file("missing-output-file")
+    final inputFile = temporaryFolder.createFile("input-file")
+    final inputDir = temporaryFolder.createDir("input-dir")
     final inputDirFile = inputDir.file("input-file2").createFile()
-    final missingInputFile = tmpDir.file("missing-input-file")
-    final inputFiles = toSet(inputFile, inputDir, missingInputFile)
-    final outputFiles = toSet(outputFile, outputDir, emptyOutputDir, missingOutputFile)
-    final createFiles = toSet(outputFile, outputDirFile, outputDirFile2)
-    TaskInternal task = builder.task()
+    final missingInputFile = temporaryFolder.file("missing-input-file")
+    final inputFiles = [file: [inputFile], dir: [inputDir], missingFile: [missingInputFile]]
+    final outputFiles = [file: [outputFile], dir: [outputDir], emptyDir: [emptyOutputDir], missingFile: [missingOutputFile]]
+    final createFiles = [outputFile, outputDirFile, outputDirFile2] as Set
+    TaskInternal task
     def mapping = Stub(CacheScopeMapping) {
         getBaseDirectory(_, _, _) >> {
-            return tmpDir.createDir("history-cache")
+            return temporaryFolder.createDir("history-cache")
         }
     }
+    DefaultFileCollectionSnapshotter fileCollectionSnapshotter
     DefaultTaskArtifactStateRepository repository
 
     def setup() {
+        gradle = project.getGradle()
+        task  = builder.task()
         CacheRepository cacheRepository = new DefaultCacheRepository(mapping, new InMemoryCacheFactory())
         TaskArtifactStateCacheAccess cacheAccess = new DefaultTaskArtifactStateCacheAccess(gradle, cacheRepository, new NoOpDecorator())
-        FileCollectionSnapshotter inputFilesSnapshotter = new DefaultFileCollectionSnapshotter(new CachingFileSnapshotter(new DefaultHasher(), cacheAccess), cacheAccess)
-        FileCollectionSnapshotter outputFilesSnapshotter = new OutputFilesCollectionSnapshotter(inputFilesSnapshotter, new RandomLongIdGenerator(), cacheAccess)
+        def stringInterner = new StringInterner()
+        def snapshotter = new CachingFileSnapshotter(new DefaultHasher(), cacheAccess, stringInterner)
+        fileCollectionSnapshotter = new DefaultFileCollectionSnapshotter(snapshotter, cacheAccess, stringInterner, TestFiles.fileSystem(), TestFiles.directoryFileTreeFactory())
+        FileCollectionSnapshotter outputFilesSnapshotter = new OutputFilesCollectionSnapshotter(fileCollectionSnapshotter)
+        def classLoaderHierarchyHasher = Mock(ConfigurableClassLoaderHierarchyHasher) // new ConfigurableClassLoaderHierarchyHasher([:], Mock(ClassLoaderHasher))
         SerializerRegistry<FileCollectionSnapshot> serializerRegistry = new DefaultSerializerRegistry<FileCollectionSnapshot>();
-        inputFilesSnapshotter.registerSerializers(serializerRegistry);
+        fileCollectionSnapshotter.registerSerializers(serializerRegistry);
         outputFilesSnapshotter.registerSerializers(serializerRegistry);
-        TaskHistoryRepository taskHistoryRepository = new CacheBackedTaskHistoryRepository(cacheAccess, new CacheBackedFileSnapshotRepository(cacheAccess, serializerRegistry.build(), new RandomLongIdGenerator()))
-        repository = new DefaultTaskArtifactStateRepository(taskHistoryRepository, DirectInstantiator.INSTANCE, outputFilesSnapshotter, inputFilesSnapshotter)
+        TaskHistoryRepository taskHistoryRepository = new CacheBackedTaskHistoryRepository(cacheAccess, new CacheBackedFileSnapshotRepository(cacheAccess, serializerRegistry.build(FileCollectionSnapshot), new RandomLongIdGenerator()), stringInterner)
+        repository = new DefaultTaskArtifactStateRepository(taskHistoryRepository, DirectInstantiator.INSTANCE, outputFilesSnapshotter, fileCollectionSnapshotter, TestFiles.fileCollectionFactory(), classLoaderHierarchyHasher)
     }
 
     def artifactsAreNotUpToDateWhenCacheIsEmpty() {
@@ -133,7 +143,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def artifactsAreNotUpToDateWhenAnyOutputFileHasChangedHash() {
         given:
         execute(task)
-        
+
         when:
         outputFile.write("new content")
 
@@ -144,7 +154,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def artifactsAreNotUpToDateWhenAnyFileInOutputDirHasChangedHash() {
         given:
         execute(task)
-        
+
         when:
         outputDirFile.write("new content")
 
@@ -155,7 +165,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def artifactsAreNotUpToDateWhenAnyOutputFilesAddedToSet() {
         when:
         execute(task)
-        TaskInternal outputFilesAddedTask = builder.withOutputFiles(outputFile, outputDir, tmpDir.createFile("output-file-2"), emptyOutputDir, missingOutputFile).task()
+        TaskInternal outputFilesAddedTask = builder.withOutputFiles(outputFile, outputDir, temporaryFolder.createFile("output-file-2"), emptyOutputDir, missingOutputFile).task()
 
         then:
         outOfDate outputFilesAddedTask
@@ -181,11 +191,11 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     }
 
     def artifactsAreNotUpToDateWhenAnyInputFilesAddedToSet() {
-        final addedFile = tmpDir.createFile("other-input")
+        final addedFile = temporaryFolder.createFile("other-input")
 
         when:
         execute(task)
-        TaskInternal inputFilesAdded = builder.withInputFiles(inputFile, inputDir, addedFile, missingInputFile).task()
+        TaskInternal inputFilesAdded = builder.withInputFiles(file: [inputFile, addedFile], dir: [inputDir], missingFile: [missingInputFile]).task()
 
         then:
         inputsOutOfDate(inputFilesAdded).withAddedFile(addedFile)
@@ -194,10 +204,10 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def artifactsAreNotUpToDateWhenAnyInputFilesRemovedFromSet() {
         when:
         execute(task)
-        TaskInternal inputFilesRemoved = builder.withInputFiles(inputFile).task()
+        TaskInternal inputFilesRemoved = builder.withInputFiles(file: [inputFile], dir: [], missingFile: [missingInputFile]).task()
 
         then:
-        inputsOutOfDate(inputFilesRemoved).withRemovedFile(inputDirFile)
+        inputsOutOfDate(inputFilesRemoved).withRemovedFiles(inputDir, inputDirFile)
     }
 
     def artifactsAreNotUpToDateWhenAnyInputFileHasChangedHash() {
@@ -220,7 +230,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
         inputFile.createDir()
 
         then:
-        inputsOutOfDate(task).withRemovedFile(inputFile)
+        inputsOutOfDate(task).withModifiedFile(inputFile)
     }
 
     def artifactsAreNotUpToDateWhenAnyInputFileNoLongerExists() {
@@ -231,7 +241,19 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
         inputFile.delete()
 
         then:
-        inputsOutOfDate(task).withRemovedFile(inputFile)
+        inputsOutOfDate(task).withModifiedFile(inputFile)
+    }
+
+    def artifactsAreNotUpToDateWhenAnyInputFileDidNotExistAndNowDoes() {
+        given:
+        inputFile.delete()
+        execute(task)
+
+        when:
+        inputFile.createNewFile()
+
+        then:
+        inputsOutOfDate(task).withModifiedFile(inputFile)
     }
 
     def artifactsAreNotUpToDateWhenAnyFileCreatedInInputDir() {
@@ -276,7 +298,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
         inputDirFile.mkdir()
 
         then:
-        inputsOutOfDate(task).withRemovedFile(inputDirFile)
+        inputsOutOfDate(task).withModifiedFile(inputDirFile)
     }
 
     def artifactsAreNotUpToDateWhenAnyInputPropertyValueChanged() {
@@ -325,18 +347,20 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def artifactsAreNotUpToDateWhenOutputDirWhichUsedToExistHasBeenDeleted() {
         given:
         // Output dir already exists before first execution of task
-        outputDirFile.createFile()
+        outputDir.createDir()
 
-        TaskInternal task1 = builder.withOutputFiles(outputDir).createsFiles(outputDirFile).task()
-        TaskInternal task2 = builder.withPath("other").withOutputFiles(outputDir).createsFiles(outputDirFile2).task()
-        
+        TaskInternal task1 = builder.withOutputFiles(outputDir).task()
+        TaskInternal task2 = builder.withPath("other").withOutputFiles(outputDir).task()
+
         when:
         TaskArtifactState state = repository.getStateFor(task1)
+        state.isUpToDate([])
+        outputDirFile.createFile()
         state.afterTask()
-        
+
         then:
         !state.upToDate
-        
+
         when:
         outputDir.deleteDir()
 
@@ -346,11 +370,11 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
         then:
         !state.isUpToDate([])
-        
+
         when:
-        task2.execute()
+        outputDirFile2.createFile()
         state.afterTask()
-        
+
         then:
         // Task should be out-of-date
         outOfDate task1
@@ -390,7 +414,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
     def hasEmptyTaskHistoryWhenTaskHasNeverBeenExecuted() {
         when:
         TaskArtifactState state = repository.getStateFor(task)
-        
+
         then:
         state.getExecutionHistory().getOutputFiles().getFiles().isEmpty()
     }
@@ -401,7 +425,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
         when:
         TaskArtifactState state = repository.getStateFor(task)
-        
+
         then:
         state.getExecutionHistory().getOutputFiles().getFiles() == [outputFile, outputDirFile, outputDirFile2] as Set
     }
@@ -477,6 +501,7 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
         outputDirFile.delete()
         TaskArtifactState state = repository.getStateFor(task)
+        state.isUpToDate([])
         state.afterTask()
 
         when:
@@ -523,10 +548,10 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
     def taskCanProduceIntoDifferentSetsOfOutputFiles() {
         when:
-        TestFile outputDir2 = tmpDir.createDir("output-dir-2")
+        TestFile outputDir2 = temporaryFolder.createDir("output-dir-2")
         TestFile outputDirFile2 = outputDir2.file("output-file-2")
-        TaskInternal task1 = builder.withOutputFiles(outputDir).createsFiles(outputDirFile).task()
-        TaskInternal task2 = builder.withOutputFiles(outputDir2).createsFiles(outputDirFile2).task()
+        TaskInternal task1 = builder.withOutputFiles(dir: [outputDir]).createsFiles(outputDirFile).task()
+        TaskInternal task2 = builder.withOutputFiles(dir: [outputDir2]).createsFiles(outputDirFile2).task()
 
         execute(task1, task2)
 
@@ -543,13 +568,13 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
     private void outOfDate(TaskInternal task) {
         final state = repository.getStateFor(task)
-        assert !state.upToDate
+        assert !state.isUpToDate([])
         assert !state.inputChanges.incremental
     }
 
     def inputsOutOfDate(TaskInternal task) {
         final state = repository.getStateFor(task)
-        assert !state.upToDate
+        assert !state.isUpToDate([])
 
         final inputChanges = state.inputChanges
         assert inputChanges.incremental
@@ -588,9 +613,13 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
         for (TaskInternal task : tasks) {
             TaskArtifactState state = repository.getStateFor(task)
             state.isUpToDate([])
+            // reset state
+            fileCollectionSnapshotter.startTaskActions()
             task.execute()
             state.afterTask()
         }
+        // reset state
+        fileCollectionSnapshotter.startTaskActions()
     }
 
     private static class ChangedFiles {
@@ -615,6 +644,12 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
             assert modified == []
             assert removed == [file]
         }
+
+        void withRemovedFiles(File... files) {
+            assert added == []
+            assert modified == []
+            assert removed == files as List
+        }
     }
 
     private TaskBuilder getBuilder() {
@@ -623,19 +658,27 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
 
     private class TaskBuilder {
         private String path = "task"
-        private Collection<? extends File> inputs = inputFiles
-        private Collection<? extends File> outputs = outputFiles
+        private Map<String, Object> inputProperties = [prop: "value"]
+        private Map<String, ? extends Collection<? extends File>> inputs = inputFiles
+        private Map<String, ? extends Collection<? extends File>> outputs = outputFiles
         private Collection<? extends TestFile> create = createFiles
         private Class<? extends TaskInternal> type = TaskInternal.class
-        private Map<String, Object> inputProperties = new HashMap<String, Object>(toMap("prop", "value"))
 
         TaskBuilder withInputFiles(File... inputFiles) {
-            inputs = Arrays.asList(inputFiles)
+            return withInputFiles(default: Arrays.asList(inputFiles))
+        }
+
+        TaskBuilder withInputFiles(Map<String, ? extends Collection<? extends File>> files) {
+            this.inputs = files
             return this
         }
 
         TaskBuilder withOutputFiles(File... outputFiles) {
-            outputs = Arrays.asList(outputFiles)
+            return withOutputFiles(default: Arrays.asList(outputFiles))
+        }
+
+        TaskBuilder withOutputFiles(Map<String, ? extends Collection<? extends File>> files) {
+            this.outputs = files
             return this
         }
 
@@ -668,13 +711,24 @@ public class DefaultTaskArtifactStateRepositoryTest extends Specification {
         TaskInternal task() {
             final TaskInternal task = TestUtil.createTask(type, project, path)
             if (inputs != null) {
-                task.getInputs().files(inputs)
+                inputs.each { String property, Collection<? extends File> files ->
+                    task.inputs.files files withPropertyName property
+                }
             }
             if (inputProperties != null) {
                 task.getInputs().properties(inputProperties)
             }
             if (outputs != null) {
-                task.getOutputs().files(outputs)
+                outputs.each { String property, Collection<? extends File> files ->
+                    if (files.size() == 1) {
+                        task.getOutputs().file files[0] withPropertyName property
+                    } else if (files.size() > 1) {
+                        for (int idx = 0; idx < files.size(); idx++) {
+                            def file = files[idx]
+                            task.getOutputs().file file withPropertyName "$property.\$$idx"
+                        }
+                    }
+                }
             }
             task.doLast(new org.gradle.api.Action<Object>() {
                 public void execute(Object o) {

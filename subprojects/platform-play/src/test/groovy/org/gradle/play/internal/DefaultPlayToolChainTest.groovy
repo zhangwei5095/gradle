@@ -29,7 +29,7 @@ import org.gradle.language.scala.ScalaPlatform
 import org.gradle.play.internal.toolchain.DefaultPlayToolChain
 import org.gradle.play.internal.twirl.TwirlCompileSpec
 import org.gradle.play.platform.PlayPlatform
-import org.gradle.process.internal.WorkerProcessBuilder
+import org.gradle.process.internal.worker.WorkerProcessFactory
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -39,11 +39,11 @@ class DefaultPlayToolChainTest extends Specification {
     ConfigurationContainer configurationContainer = Mock()
     DependencyHandler dependencyHandler = Mock()
     PlayPlatform playPlatform = Stub(PlayPlatform)
-    org.gradle.internal.Factory<WorkerProcessBuilder>  workerProcessBuilderFactory = Mock()
+    WorkerProcessFactory workerProcessBuilderFactory = Mock()
     def toolChain = new DefaultPlayToolChain(fileResolver, compilerDaemonManager, configurationContainer, dependencyHandler, workerProcessBuilderFactory)
 
     def setup() {
-        playPlatform.playVersion >> "2.3.7"
+        playPlatform.playVersion >> DefaultPlayPlatform.DEFAULT_PLAY_VERSION
         playPlatform.scalaPlatform >> Stub(ScalaPlatform) {
             getScalaCompatibilityVersion() >> "2.10"
         }

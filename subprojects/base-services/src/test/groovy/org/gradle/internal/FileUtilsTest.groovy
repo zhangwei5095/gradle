@@ -20,11 +20,12 @@ import org.apache.commons.lang.RandomStringUtils
 import org.gradle.api.GradleException
 import spock.lang.Specification
 
-import static FileUtils.toSafeFileName
 import static FileUtils.assertInWindowsPathLengthLimitation
-
+import static FileUtils.toSafeFileName
+import static org.gradle.internal.FileUtils.calculateRoots
 
 class FileUtilsTest extends Specification {
+
     def "toSafeFileName encodes unsupported characters"() {
         expect:
         toSafeFileName(input) == output
@@ -38,7 +39,7 @@ class FileUtilsTest extends Specification {
         'with / \\ #' | 'with#20#2f#20#5c#20#23'
     }
 
-    def "assertInWindowsPathLengthLimitation throws exception when path limit exceeded"(){
+    def "assertInWindowsPathLengthLimitation throws exception when path limit exceeded"() {
         when:
         File inputFile = new File(RandomStringUtils.randomAlphanumeric(10))
         then:
@@ -52,12 +53,24 @@ class FileUtilsTest extends Specification {
         e.message.contains("exceeds windows path limitation of 260 character.")
     }
 
-    def "can create a temp directory" () {
-        when:
-        def tempDir = FileUtils.createTempDir("tempTest")
-
-        then:
-        tempDir.exists()
-        tempDir.isDirectory()
+    List<File> toRoots(Iterable<? extends File> files) {
+        calculateRoots(files)
     }
+
+    List<File> files(String... paths) {
+        paths.collect { new File("/", it).absoluteFile }
+    }
+
+    def "can find roots when leafs are directories"() {
+        expect:
+        toRoots([]) == []
+        toRoots(files("a/a", "a/a")) == files("a/a")
+        toRoots(files("a", "b", "c")) == files("a", "b", "c")
+        toRoots(files("a/a", "a/a/a", "a/b/a")) == files("a/a", "a/b/a")
+        toRoots(files("a/a", "a/a/a", "b/a/a")) == files("a/a", "b/a/a")
+        toRoots(files("a/a/a/a/a/a/a/a/a", "a/b")) == files("a/a/a/a/a/a/a/a/a", "a/b")
+        toRoots(files("a/a/a/a/a/a/a/a/a", "a/b", "b/a/a/a/a/a/a/a/a/a/a/a")) == files("a/a/a/a/a/a/a/a/a", "a/b", "b/a/a/a/a/a/a/a/a/a/a/a")
+        toRoots(files("a/a/a/a/a/a/a/a/a", "a/b", "b/a/a/a/a/a/a/a/a/a/a/a", "b/a/a/a/a")) == files("a/a/a/a/a/a/a/a/a", "a/b", "b/a/a/a/a")
+    }
+
 }

@@ -24,9 +24,17 @@ package org.gradle.tooling.model.idea;
 public interface IdeaModuleDependency extends IdeaDependency {
 
     /**
-     * returns dependency module
+     * Returns the name of the target module
+     *
+     * @return target module name
+     */
+    String getTargetModuleName();
+
+    /**
+     * returns dependency module, or null if the dependency module is not in the same Gradle build.
      *
      * @return dependency module
      */
+    @Deprecated
     IdeaModule getDependencyModule();
 }

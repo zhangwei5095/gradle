@@ -15,13 +15,16 @@
  */
 
 package org.gradle.api.publish.maven
+
 import org.gradle.integtests.fixtures.publish.maven.AbstractMavenPublishIntegTest
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.test.fixtures.keystore.TestKeyStore
 import org.gradle.test.fixtures.server.http.HttpServer
 import org.gradle.test.fixtures.server.http.MavenHttpModule
 import org.gradle.test.fixtures.server.http.MavenHttpRepository
 import org.junit.Rule
 
+@LeaksFileHandles
 class MavenPublishHttpsIntegTest extends AbstractMavenPublishIntegTest {
     TestKeyStore keyStore
 
@@ -36,6 +39,10 @@ class MavenPublishHttpsIntegTest extends AbstractMavenPublishIntegTest {
 
         mavenRemoteRepo = new MavenHttpRepository(server, "/repo", mavenRepo)
         module = mavenRemoteRepo.module('org.gradle', 'publish', '2')
+    }
+
+    def cleanup() {
+        server.stop()
     }
 
     def "publish with server certificate"() {
@@ -77,12 +84,11 @@ class MavenPublishHttpsIntegTest extends AbstractMavenPublishIntegTest {
 
         then:
         failure.assertHasCause("Failed to publish publication 'maven' to repository 'maven'")
-        failure.assertHasCause("Error deploying artifact 'org.gradle:publish:jar': Error deploying artifact: Could not write to resource 'org/gradle/publish/2/publish-2.jar'")
-        // TODO:DAZ Get this exception into the cause
-        failure.error.contains("peer not authenticated")
+        failure.assertHasCause("Failed to deploy artifacts: Could not transfer artifact org.gradle:publish:jar:2 from/to remote (https://localhost:${server.sslPort}/repo): Could not write to resource 'org/gradle/publish/2/publish-2.jar'")
+        failure.error.contains("javax.net.ssl.SSLHandshakeException")
     }
 
-    def "decent error message when server can't authenticate client"() {
+    def "build fails when server can't authenticate client"() {
         keyStore.enableSslWithServerAndBadClientCert(server)
         initBuild()
 
@@ -94,9 +100,8 @@ class MavenPublishHttpsIntegTest extends AbstractMavenPublishIntegTest {
 
         then:
         failure.assertHasCause("Failed to publish publication 'maven' to repository 'maven'")
-        failure.assertHasCause("Error deploying artifact 'org.gradle:publish:jar': Error deploying artifact: Could not write to resource 'org/gradle/publish/2/publish-2.jar'")
-        // TODO:DAZ Get this exception into the cause
-        failure.error.contains("peer not authenticated")
+        failure.assertHasCause("Failed to deploy artifacts: Could not transfer artifact org.gradle:publish:jar:2 from/to remote (https://localhost:${server.sslPort}/repo): Could not write to resource 'org/gradle/publish/2/publish-2.jar'")
+        failure.error.contains("at org.apache.http.conn.ssl.SSLConnectionSocketFactory.createLayeredSocket")
     }
 
     def expectPublication() {

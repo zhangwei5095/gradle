@@ -16,23 +16,22 @@
 
 package org.gradle.api.internal.initialization.loadercache
 
-import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.longlived.PersistentBuildProcessIntegrationTest
 import org.gradle.integtests.fixtures.executer.ExecutionResult
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import spock.lang.Ignore
-import spock.lang.IgnoreIf
 
-//classloaders are cached in process so the test only makes sense if gradle invocations share the process
-@IgnoreIf({ !GradleContextualExecuter.longLivingProcess })
-class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
+class ClassLoadersCachingIntegrationTest extends PersistentBuildProcessIntegrationTest {
 
     def cacheSizePerRun = []
 
     def setup() {
-        executer.requireIsolatedDaemons()
         file("cacheCheck.gradle") << """
             def cache = gradle.services.get(org.gradle.api.internal.initialization.loadercache.ClassLoaderCache)
-            gradle.buildFinished { println "### cache size: " + cache.size() }
+            gradle.buildFinished {
+                println "### cache size: " + cache.size()
+
+                cache.assertInternalIntegrity()
+            }
         """
         executer.beforeExecute {
             withArgument("-I").withArgument("cacheCheck.gradle")
@@ -187,7 +186,7 @@ class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
 
     def "refreshes when buildscript classpath gets new dependency"() {
         addIsCachedCheck()
-        file("foo.jar") << "foo"
+        file("foo.jar") << testDirectory.name
 
         when:
         run()
@@ -206,9 +205,9 @@ class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
         assertCacheDidNotGrow()
     }
 
-    def "cache shrinks when buildscript disappears"() {
+    def "cache shrinks as buildscript disappears"() {
         addIsCachedCheck()
-        file("foo.jar") << "foo"
+        file("foo.jar") << testDirectory.name
         buildFile << """
             buildscript { dependencies { classpath files("foo.jar") } }
 
@@ -222,7 +221,7 @@ class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
         run()
 
         then:
-        assertCacheSizeChange(-1) // don't need loader for buildscript pass, do need loader for second pass
+        assertCacheSizeChange(-2)
 
         then:
         run()
@@ -232,7 +231,30 @@ class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
         then:
         buildFile.delete()
         run()
-        assertCacheSizeChange(-1) // no loader needed for script at all now
+        assertCacheSizeChange(-1)
+    }
+
+    def "cache shrinks when script with buildscript block is removed"() {
+        addIsCachedCheck()
+        file("foo.jar") << testDirectory.name
+        buildFile << """
+            buildscript { dependencies { classpath files("foo.jar") } }
+
+            task foo
+        """
+
+        when:
+        run()
+        run()
+
+        then:
+        isCached()
+        assertCacheSizeChange(0)
+
+        then:
+        buildFile.delete()
+        run()
+        assertCacheSizeChange(-3)
     }
 
     def "refreshes when root project buildscript classpath changes"() {
@@ -535,10 +557,19 @@ class ClassLoadersCachingIntegrationTest extends AbstractIntegrationSpec {
         run()
 
         then:
-        // Note: not the desired behaviour, we are leaking the loader that had the buildscript for a and a/a
-        assertCacheSizeChange(-1)
+        assertCacheSizeChange(-2)
         isCached("a")
-        isNotCached("a:a")
+        isCached("a:a") // cached in cross-build cache
+
+        when:
+        file("a/a/build.gradle").text = getIsCachedCheck() + '// add some random chars'
+        run()
+
+        then:
+        assertCacheDidNotGrow()
+        isCached("a")
+        isNotCached("a:a") // cached in cross-build cache
+
     }
 
     @Ignore

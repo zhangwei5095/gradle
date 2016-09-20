@@ -15,9 +15,10 @@
  */
 
 package org.gradle.internal.resolve.result
+
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
 import org.gradle.internal.resolve.ArtifactNotFoundException
 import org.gradle.internal.resolve.ArtifactResolveException
-import org.gradle.internal.component.model.ComponentArtifactIdentifier
 import spock.lang.Specification
 
 class DefaultBuildableArtifactResolveResultTest extends Specification {
@@ -35,7 +36,7 @@ class DefaultBuildableArtifactResolveResultTest extends Specification {
         result.resolved(artifactFile)
 
         then:
-        result.file == artifactFile
+        result.result == artifactFile
         result.failure == null
         result.hasResult()
     }
@@ -49,7 +50,7 @@ class DefaultBuildableArtifactResolveResultTest extends Specification {
         result.hasResult()
 
         when:
-        result.file
+        result.result
 
         then:
         def e = thrown(ArtifactNotFoundException)
@@ -67,7 +68,7 @@ class DefaultBuildableArtifactResolveResultTest extends Specification {
         result.hasResult()
 
         when:
-        result.file
+        result.result
 
         then:
         ArtifactResolveException e = thrown()
@@ -76,7 +77,7 @@ class DefaultBuildableArtifactResolveResultTest extends Specification {
 
     def "cannot get file when no result specified"() {
         when:
-        result.file
+        result.result
 
         then:
         IllegalStateException e = thrown()
@@ -97,7 +98,7 @@ class DefaultBuildableArtifactResolveResultTest extends Specification {
 
         when:
         result.failed(failure)
-        result.file
+        result.result
 
         then:
         ArtifactResolveException e = thrown()

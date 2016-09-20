@@ -23,10 +23,15 @@ import org.gradle.api.artifacts.UnknownConfigurationException;
 import org.gradle.api.internal.AbstractNamedDomainObjectContainer;
 import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.artifacts.ConfigurationResolver;
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.dsl.dependencies.ProjectFinder;
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.ConfigurationComponentMetaDataBuilder;
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultResolutionStrategy;
+import org.gradle.api.internal.file.FileCollectionFactory;
 import org.gradle.initialization.ProjectAccessListener;
-import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.reflect.Instantiator;
 
 import java.util.Collection;
 import java.util.Set;
@@ -34,19 +39,27 @@ import java.util.Set;
 public class DefaultConfigurationContainer extends AbstractNamedDomainObjectContainer<Configuration>
         implements ConfigurationContainerInternal, ConfigurationsProvider {
     public static final String DETACHED_CONFIGURATION_DEFAULT_NAME = "detachedConfiguration";
-    
+
     private final ConfigurationResolver resolver;
     private final Instantiator instantiator;
     private final DomainObjectContext context;
     private final ListenerManager listenerManager;
     private final DependencyMetaDataProvider dependencyMetaDataProvider;
     private final ProjectAccessListener projectAccessListener;
+    private final ProjectFinder projectFinder;
+    private final ConfigurationComponentMetaDataBuilder configurationComponentMetaDataBuilder;
+    private final FileCollectionFactory fileCollectionFactory;
+    private final DependencySubstitutionRules globalDependencySubstitutionRules;
+    private final ComponentIdentifierFactory componentIdentifierFactory;
 
     private int detachedConfigurationDefaultNameCounter = 1;
 
     public DefaultConfigurationContainer(ConfigurationResolver resolver,
                                          Instantiator instantiator, DomainObjectContext context, ListenerManager listenerManager,
-                                         DependencyMetaDataProvider dependencyMetaDataProvider, ProjectAccessListener projectAccessListener) {
+                                         DependencyMetaDataProvider dependencyMetaDataProvider, ProjectAccessListener projectAccessListener,
+                                         ProjectFinder projectFinder, ConfigurationComponentMetaDataBuilder configurationComponentMetaDataBuilder,
+                                         FileCollectionFactory fileCollectionFactory, DependencySubstitutionRules globalDependencySubstitutionRules,
+                                         ComponentIdentifierFactory componentIdentifierFactory) {
         super(Configuration.class, instantiator, new Configuration.Namer());
         this.resolver = resolver;
         this.instantiator = instantiator;
@@ -54,12 +67,19 @@ public class DefaultConfigurationContainer extends AbstractNamedDomainObjectCont
         this.listenerManager = listenerManager;
         this.dependencyMetaDataProvider = dependencyMetaDataProvider;
         this.projectAccessListener = projectAccessListener;
+        this.projectFinder = projectFinder;
+        this.configurationComponentMetaDataBuilder = configurationComponentMetaDataBuilder;
+        this.fileCollectionFactory = fileCollectionFactory;
+        this.globalDependencySubstitutionRules = globalDependencySubstitutionRules;
+        this.componentIdentifierFactory = componentIdentifierFactory;
     }
 
     @Override
     protected Configuration doCreate(String name) {
+        DefaultResolutionStrategy resolutionStrategy = instantiator.newInstance(DefaultResolutionStrategy.class, globalDependencySubstitutionRules, componentIdentifierFactory);
         return instantiator.newInstance(DefaultConfiguration.class, context.absoluteProjectPath(name), name, this, resolver,
-                listenerManager, dependencyMetaDataProvider, instantiator.newInstance(DefaultResolutionStrategy.class), projectAccessListener);
+                listenerManager, dependencyMetaDataProvider, resolutionStrategy, projectAccessListener, projectFinder,
+                configurationComponentMetaDataBuilder, fileCollectionFactory, componentIdentifierFactory);
     }
 
     public Set<Configuration> getAll() {
@@ -86,7 +106,8 @@ public class DefaultConfigurationContainer extends AbstractNamedDomainObjectCont
         DetachedConfigurationsProvider detachedConfigurationsProvider = new DetachedConfigurationsProvider();
         DefaultConfiguration detachedConfiguration = new DefaultConfiguration(
                 name, name, detachedConfigurationsProvider, resolver,
-                listenerManager, dependencyMetaDataProvider, new DefaultResolutionStrategy(), projectAccessListener);
+                listenerManager, dependencyMetaDataProvider, new DefaultResolutionStrategy(globalDependencySubstitutionRules, componentIdentifierFactory), projectAccessListener, projectFinder,
+                configurationComponentMetaDataBuilder, fileCollectionFactory, componentIdentifierFactory);
         DomainObjectSet<Dependency> detachedDependencies = detachedConfiguration.getDependencies();
         for (Dependency dependency : dependencies) {
             detachedDependencies.add(dependency.copy());
@@ -94,20 +115,20 @@ public class DefaultConfigurationContainer extends AbstractNamedDomainObjectCont
         detachedConfigurationsProvider.setTheOnlyConfiguration(detachedConfiguration);
         return detachedConfiguration;
     }
-    
+
     /**
      * Build a formatted representation of all Configurations in this ConfigurationContainer.
      * Configuration(s) being toStringed are likely derivations of DefaultConfiguration.
      */
     public String dump() {
         StringBuilder reply = new StringBuilder();
-        
+
         reply.append("Configuration of type: " + getTypeDisplayName());
         Collection<Configuration> configs = getAll();
         for (Configuration c : configs) {
             reply.append("\n  " + c.toString());
         }
-        
+
         return reply.toString();
     }
 }

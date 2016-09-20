@@ -39,18 +39,19 @@ import java.io.Serializable;
 import java.util.List;
 
 public class GoogleClosureCompiler implements Compiler<JavaScriptCompileSpec>, Serializable {
+    private static final Iterable<String> SHARED_PACKAGES = Lists.newArrayList("com.google.javascript");
     private static final String DEFAULT_GOOGLE_CLOSURE_VERSION = "v20141215";
     private Class<?> sourceFileClass;
     private Class<?> compilerOptionsClass;
     private Class<Enum> compilationLevelClass;
     private Class<Object> compilerClass;
 
-    public List<String> getClassLoaderPackages() {
-        return Lists.newArrayList("com.google.javascript");
+    public Iterable<String> getClassLoaderPackages() {
+        return SHARED_PACKAGES;
     }
 
     public static Object getDependencyNotation() {
-        return String.format("com.google.javascript:closure-compiler:%s", DEFAULT_GOOGLE_CLOSURE_VERSION);
+        return "com.google.javascript:closure-compiler:" + DEFAULT_GOOGLE_CLOSURE_VERSION;
     }
 
     @Override

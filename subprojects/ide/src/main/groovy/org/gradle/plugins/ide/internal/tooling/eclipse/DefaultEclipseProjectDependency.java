@@ -16,18 +16,25 @@
 package org.gradle.plugins.ide.internal.tooling.eclipse;
 
 import java.io.Serializable;
+import java.util.List;
 
-public class DefaultEclipseProjectDependency implements Serializable {
+public class DefaultEclipseProjectDependency extends DefaultEclipseDependency implements Serializable {
     private final String path;
-    private final DefaultEclipseProject target;
 
-    public DefaultEclipseProjectDependency(String path, DefaultEclipseProject target) {
-        this.target = target;
+    private DefaultEclipseProject targetProject;
+
+    public DefaultEclipseProjectDependency(String path, boolean exported, List<DefaultClasspathAttribute> attributes, List<DefaultAccessRule> accessRules) {
+        super(exported, attributes, accessRules);
+        this.targetProject = null;
         this.path = path;
     }
 
     public DefaultEclipseProject getTargetProject() {
-        return target;
+        return targetProject;
+    }
+
+    public void setTargetProject(DefaultEclipseProject targetProject) {
+        this.targetProject = targetProject;
     }
 
     public String getPath() {
@@ -36,6 +43,6 @@ public class DefaultEclipseProjectDependency implements Serializable {
 
     @Override
     public String toString() {
-        return String.format("project dependency %s (%s)", path, target);
+        return "project dependency " + path;
     }
 }

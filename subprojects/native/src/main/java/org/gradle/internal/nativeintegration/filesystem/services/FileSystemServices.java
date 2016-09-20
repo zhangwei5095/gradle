@@ -25,17 +25,11 @@ import org.gradle.internal.nativeintegration.filesystem.FileModeMutator;
 import org.gradle.internal.nativeintegration.filesystem.Symlink;
 import org.gradle.internal.nativeplatform.filesystem.FileSystem;
 import org.gradle.internal.os.OperatingSystem;
-import org.gradle.internal.service.InitializableServiceRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FileSystemServices {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileSystemServices.class);
-    private final InitializableServiceRegistry nativeServices;
-
-    public FileSystemServices(InitializableServiceRegistry nativeServices) {
-        this.nativeServices = nativeServices;
-    }
 
     @SuppressWarnings("UnusedDeclaration")
     public FileCanonicalizer createFileCanonicalizer() {
@@ -43,14 +37,13 @@ public class FileSystemServices {
     }
 
     @SuppressWarnings("UnusedDeclaration")
-    public FileSystem createFileSystem(OperatingSystem operatingSystem) throws Exception {
+    public FileSystem createFileSystem(OperatingSystem operatingSystem, PosixFiles posixFiles) throws Exception {
         // Use no-op implementations for windows
         if (operatingSystem.isWindows()) {
-            return new GenericFileSystem(new EmptyChmod(), new FallbackStat(), new WindowsSymlink());
+            Symlink symlink = (Symlink) newInstance("org.gradle.internal.nativeintegration.filesystem.jdk7.WindowsJdk7Symlink", WindowsSymlink.class);
+            return new GenericFileSystem(new EmptyChmod(), new FallbackStat(), symlink);
         }
 
-        // Use the native-platform integration, if available
-        PosixFiles posixFiles = nativeServices.getInitialized().get(PosixFiles.class);
         if (posixFiles instanceof UnavailablePosixFiles) {
             LOGGER.debug("Native-platform file system integration is not available. Continuing with fallback.");
         } else {
@@ -60,8 +53,8 @@ public class FileSystemServices {
             return new GenericFileSystem(chmod, stat, symlink);
         }
 
-        LOGGER.debug("Using UnsupportedSymlink implementation.");
-        Symlink symlink = new UnsupportedSymlink();
+        Symlink symlink = (Symlink) newInstance("org.gradle.internal.nativeintegration.filesystem.jdk7.Jdk7Symlink", UnsupportedSymlink.class);
+        LOGGER.debug("Using {} implementation as symlink.", symlink.getClass().getSimpleName());
 
         // Use java 7 APIs, if available, otherwise fallback to no-op
         Object handler = newInstance("org.gradle.internal.nativeintegration.filesystem.jdk7.PosixJdk7FilePermissionHandler", UnsupportedFilePermissions.class);
@@ -71,7 +64,7 @@ public class FileSystemServices {
     private Object newInstance(String jdk7Type, Class<?> fallbackType) {
         // Use java 7 APIs, if available
         Class<?> handlerClass = null;
-        if (JavaVersion.current().isJava7()) {
+        if (JavaVersion.current().isJava7Compatible()) {
             try {
                 handlerClass = FileSystemServices.class.getClassLoader().loadClass(jdk7Type);
                 LOGGER.debug("Using JDK 7 file service {}", jdk7Type);

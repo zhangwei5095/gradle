@@ -20,10 +20,12 @@ import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.plugin.use.resolve.service.PluginResolutionServiceTestServer
 import org.gradle.test.fixtures.plugin.PluginBuilder
 import org.gradle.test.fixtures.server.http.MavenHttpModule
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.junit.Rule
 
 import static org.hamcrest.Matchers.startsWith
 
+@LeaksFileHandles
 class NonDeclarativePluginUseIntegrationSpec extends AbstractIntegrationSpec {
 
     public static final String PLUGIN_ID = "org.myplugin"
@@ -168,7 +170,7 @@ class NonDeclarativePluginUseIntegrationSpec extends AbstractIntegrationSpec {
     def "dependencies of non declarative plugins influence buildscript dependency resolution"() {
         given:
         [1, 2].each { n ->
-            def m = service.m2repo.module("test", "test", n)
+            def m = service.m2repo.module("test", "test", n as String)
             m.publish().allowAll()
 
             file("j$n").with {
@@ -201,12 +203,16 @@ class NonDeclarativePluginUseIntegrationSpec extends AbstractIntegrationSpec {
 
             $USE
 
-            task scriptTask << {
-                println "scriptTask - " + this.getClass().classLoader.getResource('d/v.txt').text
+            task scriptTask {
+                doLast {
+                    println "scriptTask - " + this.getClass().classLoader.getResource('d/v.txt').text
+                }
             }
 
-            task buildscriptDependencies << {
-                println "buildscriptDependencies - " + buildscript.configurations.classpath.resolvedConfiguration.resolvedArtifacts.find { it.name == "test" }.moduleVersion.id.version
+            task buildscriptDependencies {
+                doLast {
+                    println "buildscriptDependencies - " + buildscript.configurations.classpath.resolvedConfiguration.resolvedArtifacts.find { it.name == "test" }.moduleVersion.id.version
+                }
             }
         """
 

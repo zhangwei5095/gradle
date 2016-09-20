@@ -15,6 +15,7 @@
  */
 
 package org.gradle.language.c
+
 import org.gradle.language.AbstractNativeLanguageIncrementalBuildIntegrationTest
 import org.gradle.nativeplatform.fixtures.app.CHelloWorldApp
 import org.gradle.nativeplatform.fixtures.app.IncrementalHelloWorldApp

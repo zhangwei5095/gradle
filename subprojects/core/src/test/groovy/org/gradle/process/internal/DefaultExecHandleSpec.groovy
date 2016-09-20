@@ -16,6 +16,8 @@
 
 package org.gradle.process.internal
 
+import org.gradle.api.internal.file.TestFiles
+import org.gradle.internal.concurrent.ExecutorFactory
 import org.gradle.internal.jvm.Jvm
 import org.gradle.process.ExecResult
 import org.gradle.process.internal.streams.StreamsHandler
@@ -108,11 +110,56 @@ class DefaultExecHandleSpec extends Specification {
         when:
         execHandle.start();
         execHandle.abort();
-        def result = execHandle.waitForFinish();
+        then:
+        execHandle.state == ExecHandleState.ABORTED
+        and:
+        execHandle.waitForFinish().exitValue != 0
+    }
+
+    void "can abort after process has completed"() {
+        given:
+        def execHandle = handle().args(args(TestApp.class)).build();
+        execHandle.start().waitForFinish();
+
+        when:
+        execHandle.abort();
+
+        then:
+        execHandle.state == ExecHandleState.SUCCEEDED
+
+        and:
+        execHandle.waitForFinish().exitValue == 0
+    }
+
+    void "can abort after process has failed"() {
+        given:
+        def execHandle = handle().args(args(BrokenApp.class)).build();
+        execHandle.start().waitForFinish();
+
+        when:
+        execHandle.abort();
+
+        then:
+        execHandle.state == ExecHandleState.FAILED
+
+        and:
+        execHandle.waitForFinish().exitValue == 72
+    }
+
+    void "can abort after process has been aborted"() {
+        given:
+        def execHandle = handle().args(args(SlowApp.class)).build();
+        execHandle.start();
+        execHandle.abort();
+
+        when:
+        execHandle.abort();
 
         then:
         execHandle.state == ExecHandleState.ABORTED
-        result.exitValue != 0
+
+        and:
+        execHandle.waitForFinish().exitValue != 0
     }
 
     void "clients can listen to notifications"() {
@@ -255,7 +302,7 @@ class DefaultExecHandleSpec extends Specification {
 
         then:
         result.rethrowFailure()
-        1 * streamsHandler.connectStreams(_ as Process, "foo proc")
+        1 * streamsHandler.connectStreams(_ as Process, "foo proc", _ as ExecutorFactory)
         1 * streamsHandler.start()
         1 * streamsHandler.stop()
         0 * streamsHandler._
@@ -299,8 +346,8 @@ class DefaultExecHandleSpec extends Specification {
         }
     }
 
-    private ExecHandleBuilder handle() {
-        new ExecHandleBuilder()
+    private DefaultExecHandleBuilder handle() {
+        new DefaultExecHandleBuilder(TestFiles.resolver())
                 .executable(Jvm.current().getJavaExecutable().getAbsolutePath())
                 .setTimeout(20000) //sanity timeout
                 .workingDir(tmpDir.getTestDirectory());

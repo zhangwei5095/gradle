@@ -18,11 +18,16 @@ package org.gradle.api.internal.artifacts.configurations
 import org.gradle.api.artifacts.UnknownConfigurationException
 import org.gradle.api.internal.DomainObjectContext
 import org.gradle.api.internal.artifacts.ConfigurationResolver
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency
+import org.gradle.api.internal.artifacts.dsl.dependencies.ProjectFinder
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.ConfigurationComponentMetaDataBuilder
 import org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy.DefaultResolutionStrategy
+import org.gradle.api.internal.file.FileCollectionFactory
 import org.gradle.initialization.ProjectAccessListener
-import org.gradle.internal.reflect.Instantiator
 import org.gradle.internal.event.ListenerManager
+import org.gradle.internal.reflect.Instantiator
 import spock.lang.Specification
 
 public class DefaultConfigurationContainerSpec extends Specification {
@@ -33,19 +38,25 @@ public class DefaultConfigurationContainerSpec extends Specification {
     private ListenerManager listenerManager = Mock()
     private DependencyMetaDataProvider metaDataProvider = Mock()
     private ProjectAccessListener projectAccessListener = Mock()
+    private ProjectFinder projectFinder = Mock()
+    private ConfigurationComponentMetaDataBuilder metaDataBuilder = Mock()
+    private FileCollectionFactory fileCollectionFactory = Mock()
+    private ComponentIdentifierFactory componentIdentifierFactory = Mock()
+    private DependencySubstitutionRules globalSubstitutionRules = Mock()
 
     def ConfigurationInternal conf = Mock()
 
     private DefaultConfigurationContainer configurationContainer = new DefaultConfigurationContainer(
-            resolver, instantiator, domainObjectContext,
-            listenerManager, metaDataProvider, projectAccessListener);
+        resolver, instantiator, domainObjectContext,
+        listenerManager, metaDataProvider, projectAccessListener, projectFinder, metaDataBuilder, fileCollectionFactory, globalSubstitutionRules, componentIdentifierFactory);
 
     def "adds and gets"() {
         _ * conf.getName() >> "compile"
         1 * domainObjectContext.absoluteProjectPath("compile") >> ":compile"
-        1 * instantiator.newInstance(DefaultResolutionStrategy.class) >> { new DefaultResolutionStrategy() }
+        1 * instantiator.newInstance(DefaultResolutionStrategy.class, globalSubstitutionRules, componentIdentifierFactory) >> { new DefaultResolutionStrategy(globalSubstitutionRules, componentIdentifierFactory) }
         1 * instantiator.newInstance(DefaultConfiguration.class, ":compile", "compile", configurationContainer,
-                resolver, listenerManager, metaDataProvider, _ as ResolutionStrategyInternal, projectAccessListener) >> conf
+                resolver, listenerManager, metaDataProvider, _ as ResolutionStrategyInternal, projectAccessListener,
+                projectFinder, metaDataBuilder, fileCollectionFactory, componentIdentifierFactory) >> conf
 
         when:
         def compile = configurationContainer.create("compile")
@@ -63,9 +74,10 @@ public class DefaultConfigurationContainerSpec extends Specification {
     def "configures and finds"() {
         _ * conf.getName() >> "compile"
         1 * domainObjectContext.absoluteProjectPath("compile") >> ":compile"
-        1 * instantiator.newInstance(DefaultResolutionStrategy.class) >> { new DefaultResolutionStrategy() }
+        1 * instantiator.newInstance(DefaultResolutionStrategy.class, globalSubstitutionRules, componentIdentifierFactory) >> { new DefaultResolutionStrategy(globalSubstitutionRules, componentIdentifierFactory) }
         1 * instantiator.newInstance(DefaultConfiguration.class, ":compile", "compile", configurationContainer,
-                resolver, listenerManager, metaDataProvider, _ as ResolutionStrategyInternal, projectAccessListener) >> conf
+                resolver, listenerManager, metaDataProvider, _ as ResolutionStrategyInternal, projectAccessListener,
+                projectFinder, metaDataBuilder, fileCollectionFactory, componentIdentifierFactory) >> conf
 
         when:
         def compile = configurationContainer.create("compile") {

@@ -16,10 +16,8 @@
 
 package org.gradle.api.internal.tasks.compile;
 
-import com.google.common.collect.Lists;
-import org.gradle.api.JavaVersion;
+import com.google.common.base.Joiner;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.internal.file.collections.SimpleFileCollection;
 import org.gradle.api.tasks.compile.CompileOptions;
 import org.gradle.api.tasks.compile.ForkOptions;
 
@@ -118,22 +116,25 @@ public class JavaCompilerArgumentsBuilder {
             return;
         }
 
-        String sourceCompatibility = spec.getSourceCompatibility();
-        if (sourceCompatibility != null && !JavaVersion.current().equals(JavaVersion.toVersion(sourceCompatibility))) {
-            args.add("-source");
-            args.add(sourceCompatibility);
-        }
-        String targetCompatibility = spec.getTargetCompatibility();
-        if (targetCompatibility != null && !JavaVersion.current().equals(JavaVersion.toVersion(targetCompatibility))) {
-            args.add("-target");
-            args.add(targetCompatibility);
+        CompileOptions compileOptions = spec.getCompileOptions();
+        List<String> compilerArgs = compileOptions.getCompilerArgs();
+        if (!releaseOptionIsSet(compilerArgs)) {
+            String sourceCompatibility = spec.getSourceCompatibility();
+            if (sourceCompatibility != null) {
+                args.add("-source");
+                args.add(sourceCompatibility);
+            }
+            String targetCompatibility = spec.getTargetCompatibility();
+            if (targetCompatibility != null) {
+                args.add("-target");
+                args.add(targetCompatibility);
+            }
         }
         File destinationDir = spec.getDestinationDir();
         if (destinationDir != null) {
             args.add("-d");
             args.add(destinationDir.getPath());
         }
-        CompileOptions compileOptions = spec.getCompileOptions();
         if (compileOptions.isVerbose()) {
             args.add("-verbose");
         }
@@ -170,9 +171,13 @@ public class JavaCompilerArgumentsBuilder {
             args.add("-sourcepath");
             args.add(sourcepath == null ? emptyFolder(spec.getTempDir()) : sourcepath.getAsPath());
         }
-        if (compileOptions.getCompilerArgs() != null) {
-            args.addAll(compileOptions.getCompilerArgs());
+        if (compilerArgs != null) {
+            args.addAll(compilerArgs);
         }
+    }
+
+    private boolean releaseOptionIsSet(List<String> compilerArgs) {
+        return compilerArgs != null && compilerArgs.contains("-release");
     }
 
     private String emptyFolder(File parent) {
@@ -189,7 +194,7 @@ public class JavaCompilerArgumentsBuilder {
         Iterable<File> classpath = spec.getClasspath();
         if (classpath != null && classpath.iterator().hasNext()) {
             args.add("-classpath");
-            args.add(toFileCollection(classpath).getAsPath());
+            args.add(Joiner.on(File.pathSeparatorChar).join(classpath));
         }
     }
 
@@ -201,12 +206,5 @@ public class JavaCompilerArgumentsBuilder {
         for (File file : spec.getSource()) {
             args.add(file.getPath());
         }
-    }
-
-    private FileCollection toFileCollection(Iterable<File> classpath) {
-        if (classpath instanceof FileCollection) {
-            return (FileCollection) classpath;
-        }
-        return new SimpleFileCollection(Lists.newArrayList(classpath));
     }
 }

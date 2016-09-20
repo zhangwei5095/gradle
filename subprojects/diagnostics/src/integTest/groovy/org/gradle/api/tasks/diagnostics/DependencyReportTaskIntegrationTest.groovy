@@ -17,8 +17,6 @@ package org.gradle.api.tasks.diagnostics
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 
-import static org.gradle.util.TextUtil.toPlatformLineSeparators
-
 class DependencyReportTaskIntegrationTest extends AbstractIntegrationSpec {
     def setup() {
         executer.requireOwnGradleUserHomeDir()
@@ -53,20 +51,20 @@ project(":c") {
         run ":c:dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 compile
 \\--- project :a
      +--- project :b
      |    \\--- project :c (*)
      \\--- project :c (*)
-"""))
+"""
         output.contains '(*) - dependencies omitted (listed previously)'
     }
 
     def "marks modules that can't be resolved as 'FAILED'"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).dependsOn("unknown").publish()
-        mavenRepo.module("foo", "baz", 1.0).dependsOn("bar").publish()
+        mavenRepo.module("foo", "bar", "1.0").dependsOnModules("unknown").publish()
+        mavenRepo.module("foo", "baz", "1.0").dependsOnModules("bar").publish()
 
         file("build.gradle") << """
             repositories {
@@ -84,14 +82,13 @@ compile
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 foo
 +--- i:dont:exist FAILED
 \\--- foo:baz:1.0
      \\--- foo:bar:1.0
           \\--- foo:unknown:1.0 FAILED
 """
-        ))
     }
 
     def "marks dynamic versions that can't be resolved as 'FAILED'"() {
@@ -116,7 +113,7 @@ foo
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 foo
 +--- org:unknown:1.2+ FAILED
 +--- org:unknown:[1.0,2.0] FAILED
@@ -125,13 +122,12 @@ foo
 +--- org:other:1.2 FAILED
 \\--- org:other:2.0+ FAILED
 """
-        ))
     }
 
     def "marks modules that can't be resolved after conflict resolution as 'FAILED'"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).dependsOn("foo", "baz", "2.0").publish()
-        mavenRepo.module("foo", "baz", 1.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").dependsOn("foo", "baz", "2.0").publish()
+        mavenRepo.module("foo", "baz", "1.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -149,20 +145,19 @@ foo
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 config
 +--- foo:bar:1.0
 |    \\--- foo:baz:2.0 FAILED
 \\--- foo:baz:1.0 -> 2.0 FAILED
 """
-        ))
     }
 
     def "marks modules that can't be resolved after forcing a different version as 'FAILED'"() {
         given:
-        mavenRepo.module("org", "libA", 1.0).dependsOn("org", "libB", "1.0").dependsOn("org", "libC", "1.0").publish()
-        mavenRepo.module("org", "libB", 1.0).publish()
-        mavenRepo.module("org", "libC", 1.0).publish()
+        mavenRepo.module("org", "libA", "1.0").dependsOn("org", "libB", "1.0").dependsOn("org", "libC", "1.0").publish()
+        mavenRepo.module("org", "libB", "1.0").publish()
+        mavenRepo.module("org", "libC", "1.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -186,19 +181,18 @@ config
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 config
 \\--- org:libA:1.0
      +--- org:libB:1.0 -> 2.0 FAILED
      \\--- org:libC:1.0 -> 1.2+ FAILED
 """
-        ))
     }
 
     def "renders dependencies even if the configuration was already resolved"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -210,8 +204,10 @@ config
                 foo 'foo:bar:2.0'
             }
 
-            task resolveConf << {
-                configurations.foo.each { println it }
+            task resolveConf {
+                doLast {
+                    configurations.foo.each { println it }
+                }
             }
         """
 
@@ -224,12 +220,12 @@ config
 
     def "renders selected versions in case of a conflict"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
-        mavenRepo.module("foo", "bar", 3.0).dependsOn('foo', 'baz', '5.0').publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
+        mavenRepo.module("foo", "bar", "3.0").dependsOn('foo', 'baz', '5.0').publish()
 
 
-        mavenRepo.module("foo", "baz", 5.0).publish()
+        mavenRepo.module("foo", "baz", "5.0").publish()
 
         file("settings.gradle") << """include 'a', 'b', 'c', 'd', 'e'
 rootProject.name = 'root'
@@ -283,9 +279,8 @@ rootProject.name = 'root'
         run ":dependencies"
 
         then:
-        output.contains "compile - Compile classpath for source set 'main'."
-
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
+compile - Dependencies for source set 'main'.
 +--- project :a
 |    \\--- foo:bar:1.0 -> 3.0
 |         \\--- foo:baz:5.0
@@ -297,7 +292,7 @@ rootProject.name = 'root'
 |    \\--- foo:bar:2.0 -> 3.0 (*)
 \\--- project :e
      \\--- foo:bar:3.0 (*)
-"""))
+"""
     }
 
     def "renders the dependency tree"() {
@@ -307,10 +302,10 @@ rootProject.name = 'root'
         mavenRepo.module("org", "leaf3").publish()
         mavenRepo.module("org", "leaf4").publish()
 
-        mavenRepo.module("org", "middle1").dependsOn('leaf1', 'leaf2').publish()
-        mavenRepo.module("org", "middle2").dependsOn('leaf3', 'leaf4').publish()
+        mavenRepo.module("org", "middle1").dependsOnModules('leaf1', 'leaf2').publish()
+        mavenRepo.module("org", "middle2").dependsOnModules('leaf3', 'leaf4').publish()
 
-        mavenRepo.module("org", "toplevel").dependsOn("middle1", "middle2").publish()
+        mavenRepo.module("org", "toplevel").dependsOnModules("middle1", "middle2").publish()
 
         file("build.gradle") << """
             repositories {
@@ -329,7 +324,7 @@ rootProject.name = 'root'
         run ":dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 \\--- org:toplevel:1.0
      +--- org:middle1:1.0
@@ -338,18 +333,18 @@ conf
      \\--- org:middle2:1.0
           +--- org:leaf3:1.0
           \\--- org:leaf4:1.0
-"""))
+"""
     }
 
     def "shows selected versions in case of a multi-phase conflict"() {
         given:
-        mavenRepo.module("foo", "foo", 1.0).publish()
-        mavenRepo.module("foo", "foo", 2.0).publish()
-        mavenRepo.module("foo", "foo", 3.0).publish()
-        mavenRepo.module("foo", "foo", 4.0).publish()
+        mavenRepo.module("foo", "foo", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.0").publish()
+        mavenRepo.module("foo", "foo", "3.0").publish()
+        mavenRepo.module("foo", "foo", "4.0").publish()
 
-        mavenRepo.module("bar", "bar", 5.0).dependsOn("foo", "foo", "4.0").publish()
-        mavenRepo.module("bar", "bar", 6.0).dependsOn("foo", "foo", "3.0").publish()
+        mavenRepo.module("bar", "bar", "5.0").dependsOn("foo", "foo", "4.0").publish()
+        mavenRepo.module("bar", "bar", "6.0").dependsOn("foo", "foo", "3.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -371,24 +366,24 @@ conf
         run ":dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 +--- bar:bar:5.0 -> 6.0
 |    \\--- foo:foo:3.0
 +--- bar:bar:6.0 (*)
 +--- foo:foo:1.0 -> 3.0
 \\--- foo:foo:2.0 -> 3.0
-"""))
+"""
     }
 
     def "deals with dynamic versions with conflicts"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
-        mavenRepo.module("foo", "foo", 1.0).dependsOn("foo", "bar", "1.0").publish()
-        mavenRepo.module("foo", "foo", 2.0).dependsOn("foo", "bar", "1.0").publish()
-        mavenRepo.module("foo", "foo", 2.5).dependsOn("foo", "bar", "2.0").publish()
+        mavenRepo.module("foo", "foo", "1.0").dependsOn("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.0").dependsOn("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.5").dependsOn("foo", "bar", "2.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -408,12 +403,12 @@ conf
         run ":dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 +--- foo:foo:1+ -> 2.5
 |    \\--- foo:bar:2.0
 \\--- foo:foo:2+ -> 2.5 (*)
-"""))
+"""
     }
 
     def "renders ivy tree with custom configurations"() {
@@ -444,11 +439,11 @@ conf
         run ":dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 \\--- org:parent:1.0
      \\--- org:child:1.0
-"""))
+"""
     }
 
     def "renders the ivy tree with conflicts"() {
@@ -457,7 +452,7 @@ conf
         ivyRepo.module("org", "leaf2").publish()
         ivyRepo.module("org", "leaf3").publish()
         ivyRepo.module("org", "leaf4").publish()
-        ivyRepo.module("org", "leaf4", 2.0).publish()
+        ivyRepo.module("org", "leaf4", "2.0").publish()
 
         //also asserting on correct order of transitive dependencies
         ivyRepo.module("org", "middle1").dependsOn('leaf1', 'leaf2').publish()
@@ -482,7 +477,7 @@ conf
         run ":dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 +--- org:toplevel:1.0
 |    +--- org:middle1:1.0
@@ -492,7 +487,7 @@ conf
 |         +--- org:leaf3:1.0
 |         \\--- org:leaf4:1.0 -> 2.0
 \\--- org:leaf4:2.0
-"""))
+"""
     }
 
     def "tells if there are no dependencies"() {
@@ -503,10 +498,10 @@ conf
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 foo
 No dependencies
-"""))
+"""
     }
 
     def "tells if there are no configurations"() {
@@ -544,8 +539,8 @@ No dependencies
         mavenRepo.module("org", "leaf3").publish()
         mavenRepo.module("org", "leaf4").publish()
 
-        mavenRepo.module("org", "toplevel1").dependsOn('leaf1', 'leaf2').publish()
-        mavenRepo.module("org", "toplevel2").dependsOn('leaf3', 'leaf4').publish()
+        mavenRepo.module("org", "toplevel1").dependsOnModules('leaf1', 'leaf2').publish()
+        mavenRepo.module("org", "toplevel2").dependsOnModules('leaf3', 'leaf4').publish()
 
         file("build.gradle") << """
             repositories {
@@ -567,12 +562,12 @@ No dependencies
         run "dependencies", "--configuration", "conf2"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf2
 \\--- org:toplevel2:1.0
      +--- org:leaf3:1.0
      \\--- org:leaf4:1.0
-"""))
+"""
 
         !output.contains("conf1")
     }
@@ -602,16 +597,16 @@ conf2
         run "dependencies"
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 conf
 \\--- org.utils:impl:1.3 FAILED
-"""))
+"""
     }
 
     def "renders a mix of project and external dependencies"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
         file("settings.gradle") << """include 'a', 'b', 'a:c', 'd', 'e'
 rootProject.name = 'root'
@@ -665,10 +660,8 @@ rootProject.name = 'root'
         run ":dependencies"
 
         then:
-        output.contains "compile - Compile classpath for source set 'main'."
-
-        output.contains(toPlatformLineSeparators("""
-compile - Compile classpath for source set 'main'.
+        output.contains """
+compile - Dependencies for source set 'main'.
 +--- project :a
 |    \\--- foo:bar:1.0 -> 2.0
 +--- project :b
@@ -678,57 +671,10 @@ compile - Compile classpath for source set 'main'.
 \\--- project :d
      \\--- project :e
           \\--- foo:bar:2.0
-"""))
-    }
-
-    def "reports external dependency replaced to project dependency"()
-    {
-        mavenRepo.module("org.utils", "api",  '1.3').publish()
-
-        file("settings.gradle") << "include 'client', 'api', 'impl'"
-
-        buildFile << """
-            allprojects {
-                version = '1.0'
-                repositories {
-                    maven { url "${mavenRepo.uri}" }
-                }
-
-                configurations {
-                    compile
-                }
-
-                group "org.utils"
-            }
-
-            project(":api") {
-                version = '1.5'
-            }
-
-            project(":impl") {
-                dependencies {
-                    compile group: 'org.utils', name: 'api', version: '1.3', configuration: 'compile'
-                }
-
-                configurations.compile.resolutionStrategy.dependencySubstitution.all {
-                    if (it.requested.version == '1.3') {
-                        it.useTarget project(":api")
-                    }
-                }
-            }
 """
-
-        when:
-        run(":impl:dependencies")
-
-        then:
-        output.contains(toPlatformLineSeparators("""
-compile
-\\--- org.utils:api:1.3 -> project :api
-"""))
     }
 
-    def "reports external dependency replaced to project dependency with other group/name"()
+    def "reports external dependency replaced with project dependency"()
     {
         mavenRepo.module("org.utils", "api",  '1.3').publish()
 
@@ -757,10 +703,8 @@ compile
                     compile group: 'org.utils', name: 'api', version: '1.3', configuration: 'compile'
                 }
 
-                configurations.compile.resolutionStrategy.dependencySubstitution.all {
-                    if (it.requested.version == '1.3') {
-                        it.useTarget project(":api2")
-                    }
+                configurations.compile.resolutionStrategy.dependencySubstitution {
+                    substitute module('org.utils:api:1.3') with project(':api2')
                 }
             }
 """
@@ -769,14 +713,14 @@ compile
         run(":impl:dependencies")
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 compile
 \\--- org.utils:api:1.3 -> project :api2
-"""))
+"""
     }
 
-    def "reports external dependency name and version change"() {
-        mavenRepo.module("org.utils", "api2", '0.1').publish()
+    def "reports external dependency with version updated by resolve rule"() {
+        mavenRepo.module("org.utils", "api", '0.1').publish()
 
         file("settings.gradle") << "include 'client', 'impl'"
 
@@ -801,7 +745,7 @@ compile
 
                 configurations.compile.resolutionStrategy.eachDependency {
                     if (it.requested.version == '1.3') {
-                        it.useTarget group: 'org.utils', name: 'api2', version: '0.1'
+                        it.useVersion '0.1'
                     }
                 }
             }
@@ -811,9 +755,53 @@ compile
         run(":impl:dependencies")
 
         then:
-        output.contains(toPlatformLineSeparators("""
+        output.contains """
 compile
-\\--- org.utils:api:1.3 -> org.utils:api2:0.1
-"""))
+\\--- org.utils:api:1.3 -> 0.1
+"""
+    }
+
+    def "reports external dependency substituted with another"() {
+        mavenRepo.module("org.utils", "api", '0.1').publish()
+        mavenRepo.module("org.other", "another", '0.1').publish()
+
+        file("settings.gradle") << "include 'client', 'impl'"
+
+        buildFile << """
+            allprojects {
+                version = '1.0'
+                repositories {
+                    maven { url "${mavenRepo.uri}" }
+                }
+
+                configurations {
+                    compile
+                }
+
+                group "org.utils"
+            }
+
+            project(":impl") {
+                dependencies {
+                    compile group: 'org.utils', name: 'api', version: '1.3'
+                    compile group: 'org.original', name: 'original', version: '1.0'
+                }
+
+                configurations.compile.resolutionStrategy.dependencySubstitution {
+                    substitute module('org.original:original') with module('org.other:another:0.1')
+                    substitute module('org.utils:api') with module('org.utils:api:0.1')
+                }
+            }
+"""
+
+        when:
+        run(":impl:dependencies")
+
+        then:
+        output.contains """
+compile
++--- org.utils:api:1.3 -> 0.1
+\\--- org.original:original:1.0 -> org.other:another:0.1
+"""
     }
 }

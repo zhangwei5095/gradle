@@ -18,8 +18,9 @@ package org.gradle.api.tasks.compile;
 
 import org.gradle.api.AntBuilder;
 import org.gradle.api.Incubating;
-import org.gradle.api.JavaVersion;
+import org.gradle.api.file.FileTree;
 import org.gradle.api.internal.changedetection.changes.IncrementalTaskInputsInternal;
+import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter;
 import org.gradle.api.internal.file.FileOperations;
 import org.gradle.api.internal.tasks.compile.CleaningJavaCompiler;
 import org.gradle.api.internal.tasks.compile.DefaultJavaCompileSpec;
@@ -32,15 +33,23 @@ import org.gradle.api.internal.tasks.compile.incremental.cache.GeneralCompileCac
 import org.gradle.api.internal.tasks.compile.incremental.deps.LocalClassSetAnalysisStore;
 import org.gradle.api.internal.tasks.compile.incremental.jar.JarSnapshotCache;
 import org.gradle.api.internal.tasks.compile.incremental.jar.LocalJarClasspathSnapshotStore;
-import org.gradle.api.tasks.*;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.ParallelizableTask;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.incremental.IncrementalTaskInputs;
 import org.gradle.cache.CacheRepository;
 import org.gradle.internal.Factory;
+import org.gradle.jvm.internal.toolchain.JavaToolChainInternal;
 import org.gradle.jvm.platform.JavaPlatform;
 import org.gradle.jvm.platform.internal.DefaultJavaPlatform;
+import org.gradle.jvm.toolchain.JavaToolChain;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.base.internal.compile.CompilerUtil;
-import org.gradle.platform.base.internal.toolchain.ToolResolver;
 import org.gradle.util.SingleMessageLogger;
 
 import javax.inject.Inject;
@@ -61,27 +70,39 @@ import java.io.File;
  * </pre>
  */
 @ParallelizableTask
+@CacheableTask
 public class JavaCompile extends AbstractCompile {
     private File dependencyCacheDir;
     private final CompileOptions compileOptions = new CompileOptions();
 
     /**
-     * Returns the tool resolver that will be used to find the tool to compile the Java source.
+     * {@inheritDoc}
+     */
+    @Override
+    @PathSensitive(PathSensitivity.NAME_ONLY)
+    public FileTree getSource() {
+        return super.getSource();
+    }
+
+    /**
+     * Returns the tool chain that will be used to compile the Java source.
      *
-     * @return The tool resolver.
+     * @return The tool chain.
      */
     @Incubating @Inject
-    public ToolResolver getToolResolver() {
+    public JavaToolChain getToolChain() {
+        // Implementation is generated
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Sets the tool resolver that should be used to find the tool to compile the Java source.
+     * Sets the tool chain that should be used to compile the Java source.
      *
-     * @param toolResolver The tool resolver.
+     * @param toolChain The tool chain.
      */
     @Incubating
-    public void setToolResolver(ToolResolver toolResolver) {
+    public void setToolChain(JavaToolChain toolChain) {
+        // Implementation is generated
         throw new UnsupportedOperationException();
     }
 
@@ -95,13 +116,13 @@ public class JavaCompile extends AbstractCompile {
         SingleMessageLogger.incubatingFeatureUsed("Incremental java compilation");
 
         DefaultJavaCompileSpec spec = createSpec();
-        final CacheRepository repository1 = getCacheRepository();
-        final JavaCompile javaCompile1 = this;
-        final GeneralCompileCaches generalCaches1 = getGeneralCompileCaches();
+        final CacheRepository cacheRepository = getCacheRepository();
+        final GeneralCompileCaches generalCompileCaches = getGeneralCompileCaches();
+
         CompileCaches compileCaches = new CompileCaches() {
-            private final CacheRepository repository = repository1;
-            private final JavaCompile javaCompile = javaCompile1;
-            private final GeneralCompileCaches generalCaches = generalCaches1;
+            private final CacheRepository repository = cacheRepository;
+            private final JavaCompile javaCompile = JavaCompile.this;
+            private final GeneralCompileCaches generalCaches = generalCompileCaches;
 
             public ClassAnalysisCache getClassAnalysisCache() {
                 return generalCaches.getClassAnalysisCache();
@@ -120,18 +141,29 @@ public class JavaCompile extends AbstractCompile {
             }
         };
         IncrementalCompilerFactory factory = new IncrementalCompilerFactory(
-                (FileOperations) getProject(), getPath(), createCompiler(spec), source, compileCaches, (IncrementalTaskInputsInternal) inputs);
+            getFileOperations(), getCachingFileSnapshotter().createThreadSafeWrapper(), getPath(), createCompiler(spec), source, compileCaches, (IncrementalTaskInputsInternal) inputs);
         Compiler<JavaCompileSpec> compiler = factory.createCompiler();
         performCompilation(spec, compiler);
+    }
+
+    @Inject
+    protected CachingFileSnapshotter getCachingFileSnapshotter() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Inject protected FileOperations getFileOperations() {
+        throw new UnsupportedOperationException();
     }
 
     @Inject protected GeneralCompileCaches getGeneralCompileCaches() {
         throw new UnsupportedOperationException();
     }
+
     @Inject protected CacheRepository getCacheRepository() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     protected void compile() {
         DefaultJavaCompileSpec spec = createSpec();
         performCompilation(spec, createCompiler(spec));
@@ -143,14 +175,13 @@ public class JavaCompile extends AbstractCompile {
     }
 
     private CleaningJavaCompiler createCompiler(JavaCompileSpec spec) {
-        // TODO:DAZ Supply the target platform to the task, using the compatibility flags as overrides
-        // Or maybe split the legacy compile task from the new one
-        Compiler<JavaCompileSpec> javaCompiler = CompilerUtil.castCompiler(getToolResolver().resolveCompiler(spec.getClass(), getPlatform()).get());
+        Compiler<JavaCompileSpec> javaCompiler = CompilerUtil.castCompiler(((JavaToolChainInternal) getToolChain()).select(getPlatform()).newCompiler(spec.getClass()));
         return new CleaningJavaCompiler(javaCompiler, getAntBuilderFactory(), getOutputs());
     }
 
+    @Nested
     protected JavaPlatform getPlatform() {
-        return new DefaultJavaPlatform(JavaVersion.current());
+        return DefaultJavaPlatform.current();
     }
 
     private void performCompilation(JavaCompileSpec spec, Compiler<JavaCompileSpec> compiler) {

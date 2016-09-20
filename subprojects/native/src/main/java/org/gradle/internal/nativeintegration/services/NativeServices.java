@@ -15,8 +15,14 @@
  */
 package org.gradle.internal.nativeintegration.services;
 
-import net.rubygrapefruit.platform.*;
+import net.rubygrapefruit.platform.NativeException;
+import net.rubygrapefruit.platform.NativeIntegrationUnavailableException;
+import net.rubygrapefruit.platform.PosixFiles;
 import net.rubygrapefruit.platform.Process;
+import net.rubygrapefruit.platform.ProcessLauncher;
+import net.rubygrapefruit.platform.SystemInfo;
+import net.rubygrapefruit.platform.Terminals;
+import net.rubygrapefruit.platform.WindowsRegistry;
 import net.rubygrapefruit.platform.internal.DefaultProcessLauncher;
 import org.gradle.internal.SystemProperties;
 import org.gradle.internal.jvm.Jvm;
@@ -27,12 +33,11 @@ import org.gradle.internal.nativeintegration.console.NoOpConsoleDetector;
 import org.gradle.internal.nativeintegration.console.WindowsConsoleDetector;
 import org.gradle.internal.nativeintegration.filesystem.services.FileSystemServices;
 import org.gradle.internal.nativeintegration.filesystem.services.UnavailablePosixFiles;
-import org.gradle.internal.nativeintegration.jna.JnaBootPathConfigurer;
 import org.gradle.internal.nativeintegration.jna.UnsupportedEnvironment;
 import org.gradle.internal.nativeintegration.processenvironment.NativePlatformBackedProcessEnvironment;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.service.DefaultServiceRegistry;
-import org.gradle.internal.service.InitializableServiceRegistry;
+import org.gradle.internal.service.ServiceRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,53 +49,67 @@ import java.lang.reflect.Proxy;
 /**
  * Provides various native platform integration services.
  */
-public class NativeServices extends DefaultServiceRegistry implements InitializableServiceRegistry {
+public class NativeServices extends DefaultServiceRegistry implements ServiceRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeServices.class);
     private static boolean useNativePlatform = "true".equalsIgnoreCase(System.getProperty("org.gradle.native", "true"));
     private static final NativeServices INSTANCE = new NativeServices();
     private static boolean initialized;
+    private static File nativeBaseDir;
+
+    public static final String NATIVE_DIR_OVERRIDE = "org.gradle.native.dir";
 
     /**
      * Initializes the native services to use the given user home directory to store native libs and other resources. Does nothing if already initialized. Will be implicitly initialized on first usage
      * of a native service. Also initializes the Native-Platform library using the given user home directory.
      */
-    public static void initialize(File userHomeDir) {
-        File nativeDir = new File(userHomeDir, "native");
-        if (useNativePlatform) {
-            try {
-                net.rubygrapefruit.platform.Native.init(nativeDir);
-            } catch (NativeIntegrationUnavailableException ex) {
-                LOGGER.debug("Native-platform is not available.");
-                useNativePlatform = false;
-            } catch (NativeException ex) {
-                LOGGER.debug("Unable to initialize native-platform. Failure: {}", format(ex));
-                useNativePlatform = false;
-            }
-        }
-        if (OperatingSystem.current().isWindows()) {
-            // JNA is still being used by jansi
-            new JnaBootPathConfigurer().configure(nativeDir);
-        }
-        initialized = true;
-    }
-
-    public static NativeServices getInstance() {
-        return INSTANCE.getInitialized();
-    }
-
-    public NativeServices getInitialized() {
+    public static synchronized void initialize(File userHomeDir) {
         if (!initialized) {
-            throw new IllegalStateException("Cannot get an instance of NativeServices without first calling initialize()."
-                    + "\nIf this occurs while running gradle or running integration tests, it is indicative of a problem."
-                    + "\nIf this occurs while running unit tests, then either use the NativeServicesTestFixture or the '@UsesNativeServices' annotation.");
+            nativeBaseDir = getNativeServicesDir(userHomeDir);
+            if (useNativePlatform) {
+                try {
+                    net.rubygrapefruit.platform.Native.init(nativeBaseDir);
+                } catch (NativeIntegrationUnavailableException ex) {
+                    LOGGER.debug("Native-platform is not available.");
+                    useNativePlatform = false;
+                } catch (NativeException ex) {
+                    if (ex.getCause() instanceof UnsatisfiedLinkError && ex.getCause().getMessage().toLowerCase().contains("already loaded in another classloader")) {
+                        LOGGER.debug("Unable to initialize native-platform. Failure: {}", format(ex));
+                        useNativePlatform = false;
+                    } else {
+                        throw ex;
+                    }
+                }
+            }
+            initialized = true;
+
+            LOGGER.info("Initialized native services in: " + nativeBaseDir);
         }
-        return this;
+    }
+
+    public static File getNativeServicesDir(File userHomeDir) {
+        String overrideProperty = getNativeDirOverride();
+        if (overrideProperty == null) {
+            return new File(userHomeDir, "native");
+        } else {
+            return new File(overrideProperty);
+        }
+    }
+
+    private static String getNativeDirOverride() {
+        return System.getProperty(NATIVE_DIR_OVERRIDE, System.getenv(NATIVE_DIR_OVERRIDE));
+    }
+
+    public static synchronized NativeServices getInstance() {
+        if (!initialized) {
+            // If this occurs while running gradle or running integration tests, it is indicative of a problem.
+            // If this occurs while running unit tests, then either use the NativeServicesTestFixture or the '@UsesNativeServices' annotation.
+            throw new IllegalStateException("Cannot get an instance of NativeServices without first calling initialize().");
+        }
+        return INSTANCE;
     }
 
     private NativeServices() {
-        // We initialize FileSystemServices with this instance because calling NativeServices.getInstance() from inside
-        // FileSystemServices would create a class cycle across packages.
-        addProvider(new FileSystemServices(this));
+        addProvider(new FileSystemServices());
     }
 
     @Override
@@ -204,6 +223,7 @@ public class NativeServices extends DefaultServiceRegistry implements Initializa
             this.type = type;
         }
 
+        @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             throw new org.gradle.internal.nativeintegration.NativeIntegrationUnavailableException(String.format("%s is not supported on this operating system.", type));
         }

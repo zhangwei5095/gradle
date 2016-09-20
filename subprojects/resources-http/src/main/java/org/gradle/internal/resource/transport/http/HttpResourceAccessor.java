@@ -16,7 +16,7 @@
 
 package org.gradle.internal.resource.transport.http;
 
-import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.gradle.api.Nullable;
@@ -48,7 +48,7 @@ public class HttpResourceAccessor implements ExternalResourceAccessor {
         String location = uri.toString();
         LOGGER.debug("Constructing external resource: {}", location);
 
-        HttpResponse response = http.performGet(location);
+        CloseableHttpResponse response = http.performGet(location);
         if (response != null) {
             HttpResponseResource resource = wrapResponse(uri, response);
             return recordOpenGetResource(resource);
@@ -67,7 +67,7 @@ public class HttpResourceAccessor implements ExternalResourceAccessor {
         LOGGER.debug("Constructing external resource: {}", location);
 
         HttpRequestBase request = new HttpGet(uri);
-        HttpResponse response;
+        CloseableHttpResponse response;
         try {
             response = http.performHttpRequest(request);
         } catch (IOException e) {
@@ -82,7 +82,7 @@ public class HttpResourceAccessor implements ExternalResourceAccessor {
         abortOpenResources();
         String location = uri.toString();
         LOGGER.debug("Constructing external resource metadata: {}", location);
-        HttpResponse response = http.performHead(location);
+        CloseableHttpResponse response = http.performHead(location);
         return response == null ? null : new HttpResponseResource("HEAD", uri, response).getMetaData();
     }
 
@@ -93,7 +93,7 @@ public class HttpResourceAccessor implements ExternalResourceAccessor {
 
     private void abortOpenResources() {
         for (Closeable openResource : openResources) {
-            LOGGER.warn("Forcing close on abandoned resource: " + openResource);
+            LOGGER.warn("Forcing close on abandoned resource: {}", openResource);
             try {
                 openResource.close();
             } catch (IOException e) {
@@ -103,7 +103,7 @@ public class HttpResourceAccessor implements ExternalResourceAccessor {
         openResources.clear();
     }
 
-    private HttpResponseResource wrapResponse(URI uri, HttpResponse response) {
+    private HttpResponseResource wrapResponse(URI uri, CloseableHttpResponse response) {
         return new HttpResponseResource("GET", uri, response) {
             @Override
             public void close() throws IOException {

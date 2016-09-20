@@ -21,7 +21,7 @@ import org.gradle.model.RuleSource;
 import org.gradle.model.internal.core.*;
 import org.gradle.model.internal.type.ModelType;
 
-public interface ModelRegistry extends ModelRegistrar {
+public interface ModelRegistry {
 
     /**
      * Get the fully defined model element at the given path as the given type.
@@ -33,7 +33,9 @@ public interface ModelRegistry extends ModelRegistrar {
      * @param <T> the type to project the node as
      * @return the node as the given type
      */
-    public <T> T realize(ModelPath path, ModelType<T> type);
+    <T> T realize(ModelPath path, ModelType<T> type);
+    <T> T realize(String path, ModelType<T> type);
+    <T> T realize(String path, Class<T> type);
 
     /**
      * Get the fully defined model element at the given path.
@@ -41,9 +43,8 @@ public interface ModelRegistry extends ModelRegistrar {
      * No attempt to mutate the returned object should be made.
      *
      * @param path the path for the node
-     * @return the node, or null if no such element.
+     * @return the node.
      */
-    @Nullable
     ModelNode realizeNode(ModelPath path);
 
     /**
@@ -58,47 +59,29 @@ public interface ModelRegistry extends ModelRegistrar {
      */
     @Nullable
     <T> T find(ModelPath path, ModelType<T> type);
-
-    /**
-     * Returns the node at the given path at the desired state, if it exists.
-     * <p>
-     * If there is no known node at that path, {@code null} is returned.
-     * <p>
-     * If the node exists but is at a later state than the requested state an exception will be thrown.
-     * If the node is at an earlier state it will be irrevocably transitioned to the desired state and returned.
-     * If it is at the desired state it is returned.
-     *
-     * @param path the path for the node
-     * @param state the desired node state
-     * @return the node at the desired state, or null if node is unknown
-     */
     @Nullable
-    public ModelNode atState(ModelPath path, ModelNode.State state);
+    <T> T find(String path, ModelType<T> type);
+    @Nullable
+    <T> T find(String path, Class<T> type);
 
     /**
      * Returns the node at the given path at the desired state or later, if it exists.
      * <p>
-     * If there is no known node at that path, {@code null} is returned.
+     * If there is no known node at that path, an {@link IllegalStateException} is thrown.
      * <p>
      * If the node is at an earlier state than desired it will be irrevocably transitioned to the desired state and returned.
      * If it is at the desired state or later it is returned.
      *
      * @param path the path for the node
      * @param state the desired node state
-     * @return the node at the desired state, or null if node is unknown
+     * @return the node at the desired state
      */
-    @Nullable
-    public ModelNode atStateOrLater(ModelPath path, ModelNode.State state);
+    ModelNode atStateOrLater(ModelPath path, ModelNode.State state);
+    <T> T atStateOrLater(ModelPath path, ModelType<T> type, ModelNode.State state);
 
-    public ModelNode.State state(ModelPath path);
+    ModelNode.State state(ModelPath path);
 
     void remove(ModelPath path);
-
-    @Override
-    ModelRegistry replace(ModelCreator newCreator);
-
-    @Override
-    ModelRegistry createOrReplace(ModelCreator newCreator);
 
     /**
      * Attempts to bind the references of all model rules known at this point in time.
@@ -118,24 +101,31 @@ public interface ModelRegistry extends ModelRegistrar {
      */
     void bindAllReferences() throws UnboundModelRulesException;
 
-    @Override
-    ModelRegistry create(ModelCreator creator);
-
-    @Override
-    <T> ModelRegistry configure(ModelActionRole role, ModelAction<T> action);
-
-    ModelRegistry apply(Class<? extends RuleSource> rules);
-
-    @Nullable
-    ModelNode node(ModelPath path);
+    ModelRegistry register(ModelRegistration registration);
 
     /**
-     * Resets the state of the model registry, discarding all ephemeral state.
-     *
-     * This method also allows rules that were already added to be added again.
-     * All nodes that are known at the time this method is called are effectively frozen WRT rules.
+     * Bind the given action directly to its subject node in the given role. Calling {@link #bindAllReferences()} fails
+     * if the subject of the action is not matched by any node.
      */
-    // TODO Better name for this method?
-    void prepareForReuse();
+    ModelRegistry configure(ModelActionRole role, ModelAction action);
 
+    /**
+     * Registers a listener and binds the given action in the given role whenever a node that matches the spec is discovered.
+     * Matching nodes that are already discovered when {@code configureMatching()} is called are bound directly.
+     * Unlike with {@link #configure(ModelActionRole, ModelAction)}, {@link #bindAllReferences()} will <em>not</em> fail
+     * if no nodes match the given spec.
+     *
+     * @throws IllegalArgumentException if the given action has a <code>path</code> set.
+     */
+    ModelRegistry configureMatching(ModelSpec spec, ModelActionRole role, ModelAction action);
+
+    /**
+     * Registers a listener and applies the given {@link RuleSource} whenever a node that matches the spec is discovered.
+     * Matching nodes that are already discovered when {@code configureMatching()} is called are bound directly.
+     * Unlike with {@link #configure(ModelActionRole, ModelAction)}, {@link #bindAllReferences()} will <em>not</em> fail
+     * if no nodes match the given spec.
+     */
+    ModelRegistry configureMatching(ModelSpec spec, Class<? extends RuleSource> rules);
+
+    MutableModelNode getRoot();
 }

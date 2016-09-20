@@ -20,14 +20,22 @@ import net.jcip.annotations.ThreadSafe;
 import org.gradle.api.Transformer;
 import org.gradle.internal.classloader.ClassLoaderSpec;
 import org.gradle.internal.classloader.ClassLoaderVisitor;
-import org.gradle.internal.classloader.MutableURLClassLoader;
+import org.gradle.internal.classloader.SystemClassLoaderSpec;
+import org.gradle.internal.classloader.VisitableURLClassLoader;
 import org.gradle.util.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
+/**
+ * A {@link PayloadClassLoaderRegistry} that maps classes loaded by a set of ClassLoaders that it manages. For ClassLoaders owned by this JVM, inspects the ClassLoader to determine a ClassLoader spec to send across to the peer JVM. For classes serialized from the peer, maintains a set of cached ClassLoaders created using the ClassLoader specs received from the peer.
+ */
 @ThreadSafe
 public class DefaultPayloadClassLoaderRegistry implements PayloadClassLoaderRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultPayloadClassLoaderRegistry.class);
@@ -64,8 +72,9 @@ public class DefaultPayloadClassLoaderRegistry implements PayloadClassLoaderRegi
                 return id;
             }
 
-            public Map<Short, ClassLoaderDetails> getClassLoaders() {
-                return classLoaderDetails;
+            @Override
+            public void collectClassLoaderDefinitions(Map<Short, ClassLoaderDetails> details) {
+                details.putAll(classLoaderDetails);
             }
         };
     }
@@ -124,7 +133,7 @@ public class DefaultPayloadClassLoaderRegistry implements PayloadClassLoaderRegi
                 parents.add(getClassLoader(parentDetails));
             }
             if (parents.isEmpty()) {
-                parents.add(classLoaderFactory.getClassLoaderFor(ClassLoaderSpec.SYSTEM_CLASS_LOADER, null));
+                parents.add(classLoaderFactory.getClassLoaderFor(SystemClassLoaderSpec.INSTANCE, null));
             }
 
             LOGGER.info("Creating ClassLoader {} from {} and {}.", details.uuid, details.spec, parents);
@@ -140,9 +149,9 @@ public class DefaultPayloadClassLoaderRegistry implements PayloadClassLoaderRegi
 
             if (visitor.spec == null) {
                 if (visitor.classPath == null) {
-                    visitor.spec = ClassLoaderSpec.SYSTEM_CLASS_LOADER;
+                    visitor.spec = SystemClassLoaderSpec.INSTANCE;
                 } else {
-                    visitor.spec = new MutableURLClassLoader.Spec(CollectionUtils.toList(visitor.classPath));
+                    visitor.spec = new VisitableURLClassLoader.Spec(CollectionUtils.toList(visitor.classPath));
                 }
             }
 

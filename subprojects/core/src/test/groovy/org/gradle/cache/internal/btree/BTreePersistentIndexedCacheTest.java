@@ -26,7 +26,14 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertNull;
@@ -43,45 +50,60 @@ public class BTreePersistentIndexedCacheTest {
     @Before
     public void setup() {
         cacheFile = tmpDir.file("cache.bin");
+    }
+
+    private void createCache() {
         cache = new BTreePersistentIndexedCache<String, Integer>(cacheFile, stringSerializer, integerSerializer, (short) 4, 100);
+    }
+
+    private void verifyAndCloseCache() {
+        cache.verify();
+        cache.close();
     }
 
     @Test
     public void getReturnsNullWhenEntryDoesNotExist() {
+        createCache();
         assertNull(cache.get("unknown"));
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsAddedEntries() {
+        createCache();
         checkAdds(1, 2, 3, 4, 5);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsAddedEntriesInReverseOrder() {
+        createCache();
         checkAdds(5, 4, 3, 2, 1);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsAddedEntriesOverMultipleIndexBlocks() {
+        createCache();
         checkAdds(3, 2, 11, 5, 7, 1, 10, 8, 9, 4, 6, 0);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsAddedEntriesAfterReopen() {
+        createCache();
+
         checkAdds(1, 2, 3, 4);
 
         cache.reset();
 
         checkAdds(5, 6, 7, 8);
-        cache.verify();
+        verifyAndCloseCache();
     }
-    
+
     @Test
     public void persistsReplacedEntries() {
+        createCache();
 
         cache.put("key_1", 1);
         cache.put("key_2", 2);
@@ -106,7 +128,7 @@ public class BTreePersistentIndexedCacheTest {
         assertThat(cache.get("key_4"), equalTo(12));
         assertThat(cache.get("key_5"), equalTo(5));
 
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
@@ -135,11 +157,13 @@ public class BTreePersistentIndexedCacheTest {
 
         cache.put("key_1", "1234");
         assertThat(cacheFile.length(), equalTo(len));
+
+        cache.close();
     }
-    
+
     @Test
     public void canHandleLargeNumberOfEntries() {
-
+        createCache();
         int count = 2000;
         List<Integer> values = new ArrayList<Integer>();
         for (int i = 0; i < count; i++) {
@@ -156,68 +180,77 @@ public class BTreePersistentIndexedCacheTest {
         assertThat(cacheFile.length(), lessThan((long)(1.4 * len)));
 
         checkAdds(values);
-        
+
         // need to make this better
         assertThat(cacheFile.length(), lessThan((long) (1.4 * 1.4 * len)));
+
+        cache.close();
     }
 
     @Test
     public void persistsRemovalOfEntries() {
+        createCache();
         checkAddsAndRemoves(1, 2, 3, 4, 5);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsRemovalOfEntriesInReverse() {
+        createCache();
         checkAddsAndRemoves(Collections.<Integer>reverseOrder(), 1, 2, 3, 4, 5);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void persistsRemovalOfEntriesOverMultipleIndexBlocks() {
+        createCache();
         checkAddsAndRemoves(4, 12, 9, 1, 3, 10, 11, 7, 8, 2, 5, 6);
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void removalRedistributesRemainingEntriesWithLeftSibling() {
+        createCache();
         // Ends up with: 1 2 3 -> 4 <- 5 6
         checkAdds(1, 2, 5, 6, 4, 3);
         cache.verify();
         cache.remove("key_5");
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void removalMergesRemainingEntriesIntoLeftSibling() {
+        createCache();
         // Ends up with: 1 2 -> 3 <- 4 5
         checkAdds(1, 2, 4, 5, 3);
         cache.verify();
         cache.remove("key_4");
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void removalRedistributesRemainingEntriesWithRightSibling() {
+        createCache();
         // Ends up with: 1 2 -> 3 <- 4 5 6
         checkAdds(1, 2, 4, 5, 3, 6);
         cache.verify();
         cache.remove("key_2");
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
     public void removalMergesRemainingEntriesIntoRightSibling() {
+        createCache();
         // Ends up with: 1 2 -> 3 <- 4 5
         checkAdds(1, 2, 4, 5, 3);
         cache.verify();
         cache.remove("key_2");
-        cache.verify();
+        verifyAndCloseCache();
     }
 
     @Test
-    public void handlesBadlyFormedCacheFile() throws IOException {
-        cacheFile.assertIsFile();
+    public void handlesOpeningACacheFileThatIsBadlyFormed() throws IOException {
+        cacheFile.createNewFile();
         cacheFile.write("some junk");
 
         BTreePersistentIndexedCache<String, Integer> cache = new BTreePersistentIndexedCache<String, Integer>(cacheFile, stringSerializer, integerSerializer);
@@ -225,13 +258,31 @@ public class BTreePersistentIndexedCacheTest {
         assertNull(cache.get("key_1"));
         cache.put("key_1", 99);
 
+        cache.reset();
+
+        assertThat(cache.get("key_1"), equalTo(99));
+        cache.verify();
+
+        cache.close();
+    }
+
+    @Test
+    public void handlesOpeningATruncatedCacheFile() throws IOException {
+        BTreePersistentIndexedCache<String, Integer> cache = new BTreePersistentIndexedCache<String, Integer>(cacheFile, stringSerializer, integerSerializer);
+
+        assertNull(cache.get("key_1"));
+        cache.put("key_1", 99);
+
         RandomAccessFile file = new RandomAccessFile(cacheFile, "rw");
         file.setLength(file.length() - 10);
+        file.close();
 
         cache.reset();
 
         assertNull(cache.get("key_1"));
         cache.verify();
+
+        cache.close();
     }
 
     @Test
@@ -245,10 +296,14 @@ public class BTreePersistentIndexedCacheTest {
         assertThat(cache.get(new File("file")), equalTo(1));
         assertThat(cache.get(new File("dir/file")), equalTo(2));
         assertThat(cache.get(new File("File")), equalTo(3));
+
+        cache.close();
     }
 
     @Test
     public void handlesKeysWithSameHashCode() {
+        createCache();
+
         String key1 = new String(new byte[]{2, 31});
         String key2 = new String(new byte[]{1, 62});
         cache.put(key1, 1);
@@ -256,6 +311,8 @@ public class BTreePersistentIndexedCacheTest {
 
         assertThat(cache.get(key1), equalTo(1));
         assertThat(cache.get(key2), equalTo(2));
+
+        cache.close();
     }
 
     private void checkAdds(Integer... values) {

@@ -16,34 +16,37 @@
 
 package org.gradle.play.tasks
 import org.gradle.api.internal.file.collections.SimpleFileCollection
-import org.gradle.platform.base.internal.toolchain.ResolvedTool
 import org.gradle.play.internal.run.PlayApplicationRunner
 import org.gradle.play.internal.run.PlayApplicationRunnerToken
 import org.gradle.play.internal.run.PlayRunSpec
+import org.gradle.play.internal.toolchain.PlayToolProvider
+import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.util.RedirectStdIn
 import org.gradle.util.TestUtil
+import org.junit.ClassRule
 import org.junit.Rule
+import spock.lang.Shared
 import spock.lang.Specification
 
 class PlayRunTest extends Specification {
+    @Rule
+    TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider()
 
     PlayApplicationRunnerToken runnerToken = Mock(PlayApplicationRunnerToken)
+    PlayToolProvider playToolProvider = Mock(PlayToolProvider)
     PlayApplicationRunner playApplicationRunner = Mock(PlayApplicationRunner)
-    ResolvedTool<PlayApplicationRunner> playApplicationRunnerTool = Mock(ResolvedTool) {
-        get() >> playApplicationRunner
-    }
     InputStream systemInputStream = Mock()
 
-    @Rule
-    RedirectStdIn redirectStdIn;
+    @Shared @ClassRule
+    RedirectStdIn redirectStdIn
 
     PlayRun playRun
 
     def setup() {
-        playRun = TestUtil.createTask(PlayRun)
+        playRun = TestUtil.create(tmpDir).task(PlayRun)
         playRun.applicationJar = new File("application.jar")
         playRun.runtimeClasspath = new SimpleFileCollection()
-        playRun.playApplicationRunnerTool = playApplicationRunnerTool
+        playRun.playToolProvider = playToolProvider
         System.in = systemInputStream
     }
 
@@ -53,8 +56,9 @@ class PlayRunTest extends Specification {
         playRun.forkOptions.memoryInitialSize = "1G"
         playRun.forkOptions.memoryMaximumSize = "5G"
         when:
-        playRun.execute();
+        playRun.run();
         then:
+        1 * playToolProvider.get(PlayApplicationRunner) >> playApplicationRunner
         1 * playApplicationRunner.start(_) >> { PlayRunSpec spec ->
             assert spec.getForkOptions().memoryInitialSize == "1G"
             assert spec.getForkOptions().memoryMaximumSize == "5G"
@@ -65,22 +69,12 @@ class PlayRunTest extends Specification {
     def "passes forkOptions never null"() {
         1 * systemInputStream.read() >> 4
         when:
-        playRun.execute();
+        playRun.run();
         then:
+        1 * playToolProvider.get(PlayApplicationRunner) >> playApplicationRunner
         1 * playApplicationRunner.start(_) >> { PlayRunSpec spec ->
             assert spec.getForkOptions() != null
             runnerToken
         }
-    }
-
-    def "stops application after receiving ctrl+d"() {
-        1 * systemInputStream.read() >> {
-            1 * runnerToken.stop()
-            return 4
-        }
-        when:
-        playRun.execute();
-        then:
-        1 * playApplicationRunner.start(_) >> runnerToken
     }
 }

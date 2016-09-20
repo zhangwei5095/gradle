@@ -24,7 +24,6 @@ import org.gradle.tooling.BuildException
 import org.gradle.tooling.UnsupportedVersionException
 import org.gradle.tooling.model.idea.IdeaProject
 
-@ToolingApiVersion('>=1.8')
 @TargetGradleVersion('>=1.8')
 class BuildActionCrossVersionSpec extends ToolingApiSpecification {
     def "client receives the result of running a build action"() {
@@ -53,7 +52,7 @@ class BuildActionCrossVersionSpec extends ToolingApiSpecification {
     }
 
     @TargetGradleVersion(">=2.2")
-    def "action classes are reused"() {
+    def "action classes are reused in daemon"() {
         toolingApi.requireIsolatedDaemons()
 
         expect:
@@ -66,7 +65,7 @@ class BuildActionCrossVersionSpec extends ToolingApiSpecification {
     }
 
     @TargetGradleVersion(">=1.8 <=2.1")
-    def "action classes are reused when daemon is idle when operation starts"() {
+    def "action classes are reused in daemon when daemon is idle when operation starts"() {
         toolingApi.requireIsolatedDaemons()
 
         expect:
@@ -117,22 +116,14 @@ class BuildActionCrossVersionSpec extends ToolingApiSpecification {
         e.message.startsWith('Could not run build action using')
     }
 
-    def causes(Throwable throwable) {
-        def causes = []
-        for (def c = throwable.cause; c != null; c = c.cause) {
-            causes << c
-        }
-        return causes
-    }
-
     @ToolingApiVersion('current')
-    @TargetGradleVersion('>=1.0-milestone-8 <1.8')
+    @TargetGradleVersion('>=1.2 <1.8')
     def "gives reasonable error message when target Gradle version does not support build actions"() {
         when:
         withConnection { it.action(new FetchCustomModel()).run() }
 
         then:
         UnsupportedVersionException e = thrown()
-        e.message == "The version of Gradle you are using (${targetDist.version.version}) does not support execution of build actions provided by the tooling API client. Support for this was added in Gradle 1.8 and is available in all later versions."
+        e.message == "The version of Gradle you are using (${targetDist.version.version}) does not support the BuildActionExecuter API. Support for this is available in Gradle 1.8 and all later versions."
     }
 }

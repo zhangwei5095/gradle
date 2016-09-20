@@ -30,9 +30,9 @@ import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
  */
 @Incubating
 public class CppPlugin implements Plugin<Project> {
+    @Override
     public void apply(Project project) {
         project.getPluginManager().apply(NativeComponentPlugin.class);
         project.getPluginManager().apply(CppLangPlugin.class);
-        project.getPluginManager().apply(CppLangPCHPlugin.class);
     }
 }

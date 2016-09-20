@@ -15,17 +15,20 @@
  */
 package org.gradle.integtests.resolve
 
+import groovy.transform.NotYetImplemented
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
+import org.junit.runner.RunWith
 import spock.lang.IgnoreIf
 import spock.lang.Issue
 
+@RunWith(FluidDependenciesResolveRunner)
 class ProjectDependencyResolveIntegrationTest extends AbstractIntegrationSpec {
-
     public void "project dependency includes artifacts and transitive dependencies of default configuration in target project"() {
         given:
-        mavenRepo.module("org.other", "externalA", 1.2).publish()
-        mavenRepo.module("org.other", "externalB", 2.1).publish()
+        mavenRepo.module("org.other", "externalA", "1.2").publish()
+        mavenRepo.module("org.other", "externalB", "2.1").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -58,61 +61,64 @@ project(":b") {
         compile project(':a')
     }
 
-    task check(dependsOn: configurations.compile) << {
-        assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar', 'externalB-2.1.jar']
-        def result = configurations.compile.incoming.resolutionResult
+    task check(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar', 'externalB-2.1.jar']
+            def result = configurations.compile.incoming.resolutionResult
 
-         // Check root component
-        def rootId = result.root.id
-        assert rootId instanceof ProjectComponentIdentifier
-        def rootPublishedAs = result.root.moduleVersion
-        assert rootPublishedAs.group == 'org.gradle'
-        assert rootPublishedAs.name == 'b'
-        assert rootPublishedAs.version == '1.0'
+             // Check root component
+            def rootId = result.root.id
+            assert rootId instanceof ProjectComponentIdentifier
+            def rootPublishedAs = result.root.moduleVersion
+            assert rootPublishedAs.group == 'org.gradle'
+            assert rootPublishedAs.name == 'b'
+            assert rootPublishedAs.version == '1.0'
 
-        // Check project components
-        def projectComponents = result.root.dependencies.selected.findAll { it.id instanceof ProjectComponentIdentifier }
-        assert projectComponents.size() == 1
-        def projectA = projectComponents[0]
-        assert projectA.id.projectPath == ':a'
-        assert projectA.moduleVersion.group != null
-        assert projectA.moduleVersion.name == 'a'
-        assert projectA.moduleVersion.version == 'unspecified'
+            // Check project components
+            def projectComponents = result.root.dependencies.selected.findAll { it.id instanceof ProjectComponentIdentifier }
+            assert projectComponents.size() == 1
+            def projectA = projectComponents[0]
+            assert projectA.id.projectPath == ':a'
+            assert projectA.moduleVersion.group != null
+            assert projectA.moduleVersion.name == 'a'
+            assert projectA.moduleVersion.version == 'unspecified'
 
-        // Check project dependencies
-        def projectDependencies = result.root.dependencies.requested.findAll { it instanceof ProjectComponentSelector }
-        assert projectDependencies.size() == 1
-        def projectDependency = projectDependencies[0]
-        assert projectDependency.projectPath == ':a'
+            // Check project dependencies
+            def projectDependencies = result.root.dependencies.requested.findAll { it instanceof ProjectComponentSelector }
+            assert projectDependencies.size() == 1
+            def projectDependency = projectDependencies[0]
+            assert projectDependency.projectPath == ':a'
 
-        // Check external module components
-        def externalComponents = result.allDependencies.selected.findAll { it.id instanceof ModuleComponentIdentifier }
-        assert externalComponents.size() == 2
-        def externalA = externalComponents[0]
-        assert externalA.id.group == 'org.other'
-        assert externalA.id.module == 'externalA'
-        assert externalA.id.version == '1.2'
-        assert externalA.moduleVersion.group == 'org.other'
-        assert externalA.moduleVersion.name == 'externalA'
-        assert externalA.moduleVersion.version == '1.2'
-        def externalB = externalComponents[1]
-        assert externalB.id.group == 'org.other'
-        assert externalB.id.module == 'externalB'
-        assert externalB.id.version == '2.1'
-        assert externalB.moduleVersion.group == 'org.other'
-        assert externalB.moduleVersion.name == 'externalB'
-        assert externalB.moduleVersion.version == '2.1'
+            // Check external module components
+            def externalComponents = result.allDependencies.selected.findAll { it.id instanceof ModuleComponentIdentifier }
+            assert externalComponents.size() == 2
+            def externalA = externalComponents[0]
+            assert externalA.id.group == 'org.other'
+            assert externalA.id.module == 'externalA'
+            assert externalA.id.version == '1.2'
+            assert externalA.moduleVersion.group == 'org.other'
+            assert externalA.moduleVersion.name == 'externalA'
+            assert externalA.moduleVersion.version == '1.2'
+            def externalB = externalComponents[1]
+            assert externalB.id.group == 'org.other'
+            assert externalB.id.module == 'externalB'
+            assert externalB.id.version == '2.1'
+            assert externalB.moduleVersion.group == 'org.other'
+            assert externalB.moduleVersion.name == 'externalB'
+            assert externalB.moduleVersion.version == '2.1'
+        }
     }
 }
 """
 
         expect:
-        succeeds "check"
+        succeeds ":b:check"
+        executedAndNotSkipped ":a:jar"
     }
 
     public void "project dependency that specifies a target configuration includes artifacts and transitive dependencies of selected configuration"() {
         given:
-        mavenRepo.module("org.other", "externalA", 1.2).publish()
+        mavenRepo.module("org.other", "externalA", "1.2").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -140,18 +146,21 @@ project(":b") {
     dependencies {
         compile project(path: ':a', configuration: 'runtime')
     }
-    task check(dependsOn: configurations.compile) << {
-        assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar']
+    task check(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar']
+        }
     }
 }
 """
 
         expect:
-        succeeds "check"
+        succeeds ":b:check"
+        executedAndNotSkipped ":a:jar"
     }
 
     @Issue("GRADLE-2899")
-    public void "consuming project can refer to multiple configurations of target project"() {
+    public void "multiple project configurations can refer to different configurations of target project"() {
         given:
         file('settings.gradle') << "include 'a', 'b'"
 
@@ -183,18 +192,21 @@ project(':b') {
         configB1 project(path:':a', configuration:'configA1')
         configB2 project(path:':a', configuration:'configA2')
     }
-    task check << {
-        assert configurations.configB1.collect { it.name } == ['A1.jar']
-        assert configurations.configB2.collect { it.name } == ['A2.jar']
+    task check(dependsOn: [configurations.configB1, configurations.configB2]) {
+        doLast {
+            assert configurations.configB1.collect { it.name } == ['A1.jar']
+            assert configurations.configB2.collect { it.name } == ['A2.jar']
+        }
     }
 }
 """
 
         expect:
-        succeeds "check"
+        succeeds ":b:check"
+        executedAndNotSkipped ":a:A1jar", ":a:A2jar"
     }
 
-    public void "resolved project artifacts reflect late changes in project attributes"() {
+    public void "resolved project artifacts reflect project properties changed after task graph is resolved"() {
         given:
         file('settings.gradle') << "include 'a', 'b'"
 
@@ -202,7 +214,9 @@ project(':b') {
         file('a/build.gradle') << '''
             apply plugin: 'base'
             configurations { compile }
+            dependencies { compile project(path: ':b', configuration: 'compile') }
             task aJar(type: Jar) { }
+            gradle.taskGraph.whenReady { project.version = 'late' }
             artifacts { compile aJar }
 '''
         file('b/build.gradle') << '''
@@ -210,19 +224,26 @@ project(':b') {
             version = 'early'
             configurations { compile }
             task bJar(type: Jar) { }
-            gradle.taskGraph.whenReady { project.version = 'late' }
+            gradle.taskGraph.whenReady { project.version = 'transitive-late' }
             artifacts { compile bJar }
 '''
         file('build.gradle') << '''
-            configurations { compile }
-            dependencies { compile project(path: ':a', configuration: 'compile'), project(path: ':b', configuration: 'compile') }
-            task test(dependsOn: configurations.compile) << {
-                assert configurations.compile.collect { it.name } == ['a.jar', 'b-late.jar']
+            configurations {
+                compile
+                testCompile { extendsFrom compile }
+            }
+            dependencies { compile project(path: ':a', configuration: 'compile') }
+            task test(dependsOn: [configurations.compile, configurations.testCompile]) {
+                doLast {
+                    assert configurations.compile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
+                    assert configurations.testCompile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
+                }
             }
 '''
 
         expect:
-        succeeds "test"
+        succeeds ":test"
+        executedAndNotSkipped ":a:aJar", ":b:bJar"
     }
 
     public void "resolved project artifact can be changed by configuration task"() {
@@ -233,8 +254,11 @@ project(':b') {
         file('a/build.gradle') << '''
             apply plugin: 'base'
             configurations { compile }
-            task configureJar << {
-                tasks.aJar.archiveName = "modified-artifact.txt"
+            task configureJar {
+                doLast {
+                    tasks.aJar.extension = "txt"
+                    tasks.aJar.classifier = "modified"
+                }
             }
             task aJar(type: Jar) {
                 dependsOn configureJar
@@ -247,52 +271,22 @@ project(':b') {
                 testCompile { extendsFrom compile }
             }
             dependencies { compile project(path: ':a', configuration: 'compile') }
-            task test(dependsOn: [configurations.compile, configurations.testCompile]) << {
-                assert configurations.compile.collect { it.name } == ['modified-artifact.txt']
-                assert configurations.testCompile.collect { it.name } == ['modified-artifact.txt']
+            task test(dependsOn: [configurations.compile, configurations.testCompile]) {
+                doLast {
+                    assert configurations.compile.collect { it.name } == ['a-modified.txt']
+                    assert configurations.testCompile.collect { it.name } == ['a-modified.txt']
+                }
             }
 '''
 
         expect:
-        succeeds "test"
-    }
-
-
-    public void "set of resolved project artifacts can be changed after task graph is resolved"() {
-        given:
-        file('settings.gradle') << "include 'a'"
-
-        and:
-        file('a/build.gradle') << '''
-            apply plugin: 'base'
-            configurations { compile }
-            task jar1(type: Jar) {
-                classifier '1'
-            }
-            task jar2(type: Jar) {
-                classifier '2'
-            }
-            artifacts { compile tasks.jar1 }
-            gradle.taskGraph.whenReady {
-                configurations.compile.artifacts.clear()
-                artifacts { compile tasks.jar2 }
-            }
-'''
-        file('build.gradle') << '''
-            configurations { compile }
-            dependencies { compile project(path: ':a', configuration: 'compile') }
-            task test(dependsOn: configurations.compile) << {
-                assert configurations.compile.collect { it.name } == ['a-2.jar']
-            }
-'''
-
-        expect:
-        succeeds "test"
+        succeeds ":test"
+        executedAndNotSkipped ":a:configureJar", ":a:aJar"
     }
 
     public void "project dependency that references an artifact includes the matching artifact only plus the transitive dependencies of referenced configuration"() {
         given:
-        mavenRepo.module("group", "externalA", 1.5).publish()
+        mavenRepo.module("group", "externalA", "1.5").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -307,25 +301,28 @@ allprojects {
 project(":a") {
     configurations { 'default' {} }
     dependencies { 'default' 'group:externalA:1.5' }
-    task aJar(type: Jar) { baseName='a' }
-    task bJar(type: Jar) { baseName='b' }
-    artifacts { 'default' aJar, bJar }
+    task xJar(type: Jar) { baseName='x' }
+    task yJar(type: Jar) { baseName='y' }
+    artifacts { 'default' xJar, yJar }
 }
 
 project(":b") {
     configurations { compile }
-    dependencies { compile(project(':a')) { artifact { name = 'b'; type = 'jar' } } }
+    dependencies { compile(project(':a')) { artifact { name = 'y'; type = 'jar' } } }
     task test {
         inputs.files configurations.compile
         doFirst {
-            assert configurations.compile.files.collect { it.name } == ['b.jar', 'externalA-1.5.jar']
+            assert configurations.compile.files.collect { it.name } == ['y.jar', 'externalA-1.5.jar']
         }
     }
 }
 """
 
         expect:
-        succeeds 'test'
+        succeeds 'b:test'
+
+        // Demonstrates superfluous task dependencies for project artifacts
+        executedAndNotSkipped ":a:xJar", ":a:yJar" // Should be only the ":a:yJar"
     }
 
     public void "reports project dependency that refers to an unknown artifact"() {
@@ -354,7 +351,7 @@ project(":b") {
 """
 
         expect:
-        fails 'test'
+        fails ':b:test'
 
         and:
         failure.assertResolutionFailure(":b:compile").assertHasCause("Could not find b.jar (test:a:unspecified).")
@@ -362,7 +359,7 @@ project(":b") {
 
     public void "non-transitive project dependency includes only the artifacts of the target configuration"() {
         given:
-        mavenRepo.module("group", "externalA", 1.5).publish()
+        mavenRepo.module("group", "externalA", "1.5").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -383,14 +380,17 @@ project(':b') {
     dependencies {
         compile project(':a'), { transitive = false }
     }
-    task listJars << {
-        assert configurations.compile.collect { it.name } == ['a.jar']
+    task listJars(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar']
+        }
     }
 }
 '''
 
         expect:
-        succeeds "listJars"
+        succeeds ":b:listJars"
+        executedAndNotSkipped ":a:jar"
     }
 
     public void "can have cycle in project dependencies"() {
@@ -453,7 +453,55 @@ project('c') {
 """
 
         expect:
-        succeeds "listJars"
+        succeeds ":a:listJars"
+        executedAndNotSkipped ":b:jar", ":c:jar"
+    }
+
+    @NotYetImplemented
+    @Issue('GRADLE-3280')
+    def "can resolve recursive copy of configuration with cyclic project dependencies"() {
+        given:
+        settingsFile << "include 'a', 'b', 'c'"
+        buildScript '''
+            subprojects {
+                apply plugin: 'base'
+                task jar(type: Jar)
+                artifacts {
+                    'default' jar
+                }
+            }
+            project('a') {
+                dependencies {
+                    'default' project(':b')
+                }
+                task assertCanResolve {
+                    doLast {
+                        assert !project.configurations.default.resolvedConfiguration.hasError()
+                    }
+                }
+                task assertCanResolveRecursiveCopy {
+                    doLast {
+                        assert !project.configurations.default.copyRecursive().resolvedConfiguration.hasError()
+                    }
+                }
+            }
+            project('b') {
+                dependencies {
+                    'default' project(':c')
+                }
+            }
+            project('c') {
+                dependencies {
+                    'default' project(':a')
+                }
+            }
+        '''.stripIndent()
+
+        expect:
+        succeeds ':a:assertCanResolve'
+
+        and:
+        succeeds ':a:assertCanResolveRecursiveCopy'
     }
 
     // this test is largely covered by other tests, but does ensure that there is nothing special about
@@ -466,7 +514,7 @@ project('c') {
         file("a/build.gradle") << """
             group = "g"
             version = 1.0
-            
+
             apply plugin: 'base'
             task zip(type: Zip) {
                 from "some.txt"
@@ -481,20 +529,111 @@ project('c') {
             dependencies {
                 conf project(":a")
             }
-            
+
             task copyZip(type: Copy) {
                 from configurations.conf
                 into "\$buildDir/copied"
             }
         """
-        
+
         when:
         succeeds ":b:copyZip"
-        
+
         then:
-        ":b:copyZip" in nonSkippedTasks
-        
+        executedAndNotSkipped ":a:zip", ":b:copyZip"
+
         and:
         file("b/build/copied/a-1.0.zip").exists()
     }
+
+    def "resolving configuration with project dependency marks dependency's configuration as observed"() {
+        settingsFile << "include 'api'; include 'impl'"
+
+        buildFile << """
+            allprojects {
+                configurations {
+                    conf
+                }
+                configurations.create("default").extendsFrom(configurations.conf)
+            }
+
+            project(":impl") {
+                dependencies {
+                    conf project(":api")
+                }
+
+                task check {
+                    doLast {
+                        assert configurations.conf.state == Configuration.State.UNRESOLVED
+                        assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
+
+                        configurations.conf.resolve()
+
+                        assert configurations.conf.state == Configuration.State.RESOLVED
+                        assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
+
+                        // Attempt to change the configuration, to demonstrate that is has been observed
+                        project(":api").configurations.conf.dependencies.add(null)
+                    }
+                }
+            }
+"""
+
+        when:
+        fails("impl:check")
+
+        then:
+        failure.assertHasCause "Cannot change dependencies of configuration ':api:conf' after it has been included in dependency resolution"
+    }
+
+    @Issue(["GRADLE-3330", "GRADLE-3362"])
+    public void "project dependency can resolve multiple artifacts from target project that are differentiated by archiveName only"() {
+        given:
+        file('settings.gradle') << "include 'a', 'b'"
+
+        and:
+        buildFile << """
+project(':a') {
+    apply plugin: 'base'
+    configurations {
+        configOne
+        configTwo
+    }
+    task A1jar(type: Jar) {
+        archiveName = 'A1.jar'
+    }
+    task A2jar(type: Jar) {
+        archiveName = 'A2.jar'
+    }
+    task A3jar(type: Jar) {
+        archiveName = 'A3.jar'
+    }
+    artifacts {
+        configOne A1jar
+        configTwo A2jar
+        configTwo A3jar
+    }
+}
+
+project(':b') {
+    configurations {
+        configB
+    }
+    dependencies {
+        configB project(path:':a', configuration:'configOne')
+        configB project(path:':a', configuration:'configTwo')
+    }
+    task check(dependsOn: configurations.configB) {
+        doLast {
+            assert configurations.configB.collect { it.name } == ['A1.jar', 'A2.jar', 'A3.jar']
+        }
+    }
+}
+"""
+
+        expect:
+        succeeds ":b:check"
+        executedAndNotSkipped ":a:A1jar", ":a:A2jar", ":a:A3jar"
+    }
+
 }

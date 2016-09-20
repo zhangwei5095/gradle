@@ -22,12 +22,19 @@ import org.gradle.api.artifacts.ConfigurationContainer
 import org.gradle.api.initialization.dsl.ScriptHandler
 import org.gradle.api.internal.ClassGenerator
 import org.gradle.api.internal.ClassGeneratorBackedInstantiator
+import org.gradle.api.internal.DependencyInjectingInstantiator
 import org.gradle.api.internal.GradleInternal
-import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.artifacts.DependencyManagementServices
 import org.gradle.api.internal.artifacts.DependencyResolutionServices
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory
-import org.gradle.api.internal.file.*
+import org.gradle.api.internal.file.BaseDirFileResolver
+import org.gradle.api.internal.file.DefaultFileOperations
+import org.gradle.api.internal.file.DefaultTemporaryFileProvider
+import org.gradle.api.internal.file.FileLookup
+import org.gradle.api.internal.file.FileOperations
+import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.file.TemporaryFileProvider
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory
 import org.gradle.api.internal.initialization.ClassLoaderScope
 import org.gradle.api.internal.initialization.DefaultScriptHandler
 import org.gradle.api.internal.plugins.PluginRegistry
@@ -42,16 +49,15 @@ import org.gradle.configuration.project.ProjectConfigurationActionContainer
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.initialization.ProjectAccessListener
 import org.gradle.internal.Factory
+import org.gradle.internal.logging.LoggingManagerInternal
 import org.gradle.internal.nativeintegration.filesystem.FileSystem
 import org.gradle.internal.reflect.DirectInstantiator
 import org.gradle.internal.reflect.Instantiator
 import org.gradle.internal.service.ServiceRegistration
 import org.gradle.internal.service.ServiceRegistry
-import org.gradle.logging.LoggingManagerInternal
 import org.gradle.model.internal.inspect.ModelRuleExtractor
 import org.gradle.model.internal.inspect.ModelRuleSourceDetector
 import org.gradle.model.internal.registry.ModelRegistry
-import org.gradle.model.persist.ModelRegistryStore
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 import org.gradle.tooling.provider.model.internal.DefaultToolingModelBuilderRegistry
@@ -71,12 +77,10 @@ class ProjectScopeServicesTest extends Specification {
         createChild(_) >> Mock(PluginRegistry)
     }
     ModelRegistry modelRegistry = Mock()
-    ModelRegistryStore modelRegistryStore = Mock() {
-        get(_) >> modelRegistry
-    }
     ModelRuleSourceDetector modelRuleSourceDetector = Mock()
     def classLoaderScope = Mock(ClassLoaderScope)
     DependencyResolutionServices dependencyResolutionServices = Stub()
+    Factory<LoggingManagerInternal> loggingManagerInternalFactory = Mock()
 
     @Rule
     TestNameTestDirectoryProvider testDirectoryProvider = new TestNameTestDirectoryProvider()
@@ -86,7 +90,7 @@ class ProjectScopeServicesTest extends Specification {
         project.projectDir >> testDirectoryProvider.file("project-dir").createDir().absoluteFile
         project.buildScriptSource >> Stub(ScriptSource)
         project.getClassLoaderScope() >> classLoaderScope
-        project.getClassLoaderScope().createChild() >> classLoaderScope
+        project.getClassLoaderScope().createChild(_) >> classLoaderScope
         project.getClassLoaderScope().lock() >> classLoaderScope
         parent.get(ITaskFactory) >> taskFactory
         parent.get(DependencyFactory) >> dependencyFactory
@@ -97,15 +101,12 @@ class ProjectScopeServicesTest extends Specification {
         parent.get(ClassGenerator) >> Stub(ClassGenerator)
         parent.get(ProjectAccessListener) >> Stub(ProjectAccessListener)
         parent.get(FileLookup) >> Stub(FileLookup)
-        parent.get(ModelRegistryStore) >> modelRegistryStore
+        parent.get(DirectoryFileTreeFactory) >> Stub(DirectoryFileTreeFactory)
         parent.get(ModelRuleSourceDetector) >> modelRuleSourceDetector
         parent.get(ModelRuleExtractor) >> Stub(ModelRuleExtractor)
-        registry = new ProjectScopeServices(parent, project)
-    }
-
-    def "creates a registry for a task"() {
-        expect:
-        registry.get(ServiceRegistryFactory).createFor(Stub(TaskInternal)) instanceof TaskScopeServices
+        parent.get(DependencyInjectingInstantiator.ConstructorCache) >> Stub(DependencyInjectingInstantiator.ConstructorCache)
+        parent.get(ToolingModelBuilderRegistry) >> Mock(ToolingModelBuilderRegistry)
+        registry = new ProjectScopeServices(parent, project, loggingManagerInternalFactory)
     }
 
     def "adds all project scoped plugin services"() {
@@ -116,7 +117,7 @@ class ProjectScopeServicesTest extends Specification {
         parent.getAll(PluginServiceRegistry) >> [plugin1, plugin2]
 
         when:
-        new ProjectScopeServices(parent, project)
+        new ProjectScopeServices(parent, project, loggingManagerInternalFactory)
 
         then:
         1 * plugin1.registerProjectServices(_)
@@ -139,7 +140,7 @@ class ProjectScopeServicesTest extends Specification {
         def testDslService = Stub(Runnable)
 
         when:
-        def registry = new ProjectScopeServices(parent, project)
+        def registry = new ProjectScopeServices(parent, project, loggingManagerInternalFactory)
         def service = registry.get(Runnable)
 
         then:
@@ -187,11 +188,8 @@ class ProjectScopeServicesTest extends Specification {
     }
 
     def "provides a LoggingManager"() {
-        Factory<LoggingManagerInternal> loggingManagerFactory = Mock()
         LoggingManager loggingManager = Mock(LoggingManagerInternal)
-
-        parent.getFactory(LoggingManagerInternal) >> loggingManagerFactory
-        1 * loggingManagerFactory.create() >> loggingManager
+        1 * loggingManagerInternalFactory.create() >> loggingManager
 
         expect:
         registry.get(LoggingManager).is loggingManager

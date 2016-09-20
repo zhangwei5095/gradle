@@ -16,7 +16,8 @@
 
 package org.gradle.tooling.internal.provider
 
-import org.gradle.internal.classloader.MutableURLClassLoader
+import org.gradle.internal.classloader.VisitableURLClassLoader
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.tooling.BuildAction
 import org.gradle.util.TestClassLoader
 import spock.lang.Issue
@@ -25,7 +26,6 @@ import java.security.CodeSource
 import java.security.Permissions
 import java.security.ProtectionDomain
 import java.security.cert.Certificate
-
 
 class ClasspathInfererTest extends AbstractClassGraphSpec {
     def factory = new ClasspathInferer()
@@ -37,7 +37,7 @@ class ClasspathInfererTest extends AbstractClassGraphSpec {
         expect:
         def classpath = []
         factory.getClassPathFor(actionClass, classpath)
-        def loader = new MutableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
+        def loader = new VisitableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
         def action = loader.loadClass(CustomAction.name).newInstance()
         action.execute(null)
     }
@@ -49,7 +49,7 @@ class ClasspathInfererTest extends AbstractClassGraphSpec {
         expect:
         def classpath = []
         factory.getClassPathFor(actionClass, classpath)
-        def loader = new MutableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
+        def loader = new VisitableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
         def action = loader.loadClass(CustomAction.name).newInstance()
         action.execute(null)
     }
@@ -62,12 +62,13 @@ class ClasspathInfererTest extends AbstractClassGraphSpec {
         expect:
         def classpath = []
         factory.getClassPathFor(actionClass, classpath)
-        def loader = new MutableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
+        def loader = new VisitableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
         def action = loader.loadClass(CustomAction.name).newInstance()
         action.execute(null)
     }
 
     @Issue("GRADLE-3245")
+    @LeaksFileHandles
     def "determines action and tooling API classpath when loaded from a jar via a non-standard ClassLoader"() {
         def cl = new NetBeansLikeClassLoader(ClassLoader.systemClassLoader.parent, [isolatedClassesInJar(CustomAction, CustomModel)] + toolingApiClassPath)
         def actionClass = cl.loadClass(CustomAction.name)
@@ -75,9 +76,14 @@ class ClasspathInfererTest extends AbstractClassGraphSpec {
         expect:
         def classpath = []
         factory.getClassPathFor(actionClass, classpath)
-        def loader = new MutableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
-        def action = loader.loadClass(CustomAction.name).newInstance()
-        action.execute(null)
+        def loader
+        try {
+            loader = new VisitableURLClassLoader(ClassLoader.systemClassLoader.parent, classpath)
+            def action = loader.loadClass(CustomAction.name).newInstance()
+            action.execute(null)
+        } finally {
+            loader?.close()
+        }
     }
 
     private List<File> getToolingApiClassPath() {

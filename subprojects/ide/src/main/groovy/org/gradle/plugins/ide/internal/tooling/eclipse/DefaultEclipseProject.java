@@ -40,6 +40,11 @@ public class DefaultEclipseProject implements Serializable, GradleProjectIdentit
     private Iterable<? extends DefaultEclipseTask> tasks;
     private Iterable<? extends DefaultEclipseLinkedResource> linkedResources;
     private DefaultGradleProject gradleProject;
+    private List<DefaultEclipseProjectNature> projectNatures;
+    private List<DefaultEclipseBuildCommand> buildCommands;
+    private DefaultEclipseJavaSourceSettings javaSourceSettings;
+    private List<DefaultEclipseClasspathContainer> classpathContainers;
+    private DefaultEclipseOutputLocation outputLocation;
 
     public DefaultEclipseProject(String name, String path, String description, File projectDirectory, Iterable<? extends DefaultEclipseProject> children) {
         this.name = name;
@@ -51,13 +56,17 @@ public class DefaultEclipseProject implements Serializable, GradleProjectIdentit
         this.classpath = Collections.emptyList();
         this.sourceDirectories = Collections.emptyList();
         this.projectDependencies = Collections.emptyList();
+        this.projectNatures = Collections.emptyList();
+        this.buildCommands = Collections.emptyList();
+        this.classpathContainers = Collections.emptyList();
     }
 
     @Override
     public String toString() {
-        return String.format("project '%s'", path);
+        return "project '" + path + "'";
     }
 
+    @Override
     public String getPath() {
         return path;
     }
@@ -133,5 +142,45 @@ public class DefaultEclipseProject implements Serializable, GradleProjectIdentit
     public DefaultEclipseProject setGradleProject(DefaultGradleProject gradleProject) {
         this.gradleProject = gradleProject;
         return this;
+    }
+
+    public List<DefaultEclipseProjectNature> getProjectNatures() {
+        return projectNatures;
+    }
+
+    public void setProjectNatures(List<DefaultEclipseProjectNature> projectNatures) {
+        this.projectNatures = projectNatures;
+    }
+
+    public List<DefaultEclipseBuildCommand> getBuildCommands() {
+        return buildCommands;
+    }
+
+    public void setBuildCommands(List<DefaultEclipseBuildCommand> buildCommands) {
+        this.buildCommands = buildCommands;
+    }
+
+    public DefaultEclipseJavaSourceSettings getJavaSourceSettings() {
+        return javaSourceSettings;
+    }
+
+    public void setJavaSourceSettings(DefaultEclipseJavaSourceSettings javaSourceSettings) {
+        this.javaSourceSettings = javaSourceSettings;
+    }
+
+    public List<DefaultEclipseClasspathContainer> getClasspathContainers() {
+        return classpathContainers;
+    }
+
+    public void setClasspathContainers(List<DefaultEclipseClasspathContainer> classpathContainers) {
+        this.classpathContainers = classpathContainers;
+    }
+
+    public DefaultEclipseOutputLocation getOutputLocation() {
+        return outputLocation;
+    }
+
+    public void setOutputLocation(DefaultEclipseOutputLocation outputLocation) {
+        this.outputLocation = outputLocation;
     }
 }

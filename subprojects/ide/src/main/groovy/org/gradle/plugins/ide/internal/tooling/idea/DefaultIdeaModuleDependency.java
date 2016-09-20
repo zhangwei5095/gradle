@@ -17,11 +17,18 @@
 package org.gradle.plugins.ide.internal.tooling.idea;
 
 import org.gradle.tooling.model.idea.IdeaDependencyScope;
+import org.gradle.tooling.provider.model.internal.LegacyConsumerInterface;
 
+@LegacyConsumerInterface("org.gradle.tooling.model.idea.IdeaModuleDependency")
 public class DefaultIdeaModuleDependency extends DefaultIdeaDependency {
+    private final String targetModuleName;
     private IdeaDependencyScope scope;
     private DefaultIdeaModule dependencyModule;
     private boolean exported;
+
+    public DefaultIdeaModuleDependency(String targetModuleName) {
+        this.targetModuleName = targetModuleName;
+    }
 
     public IdeaDependencyScope getScope() {
         return scope;
@@ -30,6 +37,10 @@ public class DefaultIdeaModuleDependency extends DefaultIdeaDependency {
     public DefaultIdeaModuleDependency setScope(IdeaDependencyScope scope) {
         this.scope = scope;
         return this;
+    }
+
+    public String getTargetModuleName() {
+        return targetModuleName;
     }
 
     public DefaultIdeaModule getDependencyModule() {
@@ -54,7 +65,7 @@ public class DefaultIdeaModuleDependency extends DefaultIdeaDependency {
     public String toString() {
         return "DefaultIdeaModuleDependency{"
                  + "scope='" + scope + '\''
-                 + ", dependencyModule name='" + dependencyModule.getName() + '\''
+                 + ", targetModuleName='" + targetModuleName + '\''
                  + ", exported=" + exported
                  + '}';
     }

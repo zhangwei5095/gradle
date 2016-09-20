@@ -18,16 +18,28 @@ package org.gradle.api.tasks.javadoc;
 
 import groovy.lang.Closure;
 import org.gradle.api.Incubating;
-import org.gradle.api.JavaVersion;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.tasks.*;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Classpath;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.ParallelizableTask;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.SourceTask;
+import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.javadoc.internal.JavadocSpec;
 import org.gradle.external.javadoc.MinimalJavadocOptions;
 import org.gradle.external.javadoc.StandardJavadocDocletOptions;
+import org.gradle.jvm.internal.toolchain.JavaToolChainInternal;
+import org.gradle.jvm.platform.JavaPlatform;
 import org.gradle.jvm.platform.internal.DefaultJavaPlatform;
+import org.gradle.jvm.toolchain.JavaToolChain;
 import org.gradle.language.base.internal.compile.Compiler;
-import org.gradle.platform.base.Platform;
-import org.gradle.platform.base.internal.toolchain.ToolResolver;
 import org.gradle.util.GUtil;
 
 import javax.inject.Inject;
@@ -71,6 +83,7 @@ import java.util.List;
  * }
  * </pre>
  */
+@CacheableTask
 @ParallelizableTask
 public class Javadoc extends SourceTask {
     private File destinationDir;
@@ -139,30 +152,40 @@ public class Javadoc extends SourceTask {
         spec.setWorkingDir(getProject().getProjectDir());
         spec.setOptionsFile(getOptionsFile());
 
-        Compiler<JavadocSpec> generator = getToolResolver().resolveCompiler(JavadocSpec.class, getPlatform()).get();
+        Compiler<JavadocSpec> generator = ((JavaToolChainInternal) getToolChain()).select(getPlatform()).newCompiler(JavadocSpec.class);
         generator.execute(spec);
     }
 
     /**
-     * <p>Returns the the tool resolver which will be used to find the tool to generate the documention.</p>
-     *
-     * @return the tool resolver
+     * {@inheritDoc}
+     */
+    @PathSensitive(PathSensitivity.RELATIVE)
+    @Override
+    public FileTree getSource() {
+        return super.getSource();
+    }
+
+    /**
+     * Returns the tool chain that will be used to generate the Javadoc.
      */
     @Incubating @Inject
-    public ToolResolver getToolResolver() {
+    public JavaToolChain getToolChain() {
+        // Implementation is generated
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Sets the tool resolver which will be used to find the tool to generate the Javadoc.
+     * Sets the tool chain to use to generate the Javadoc.
      */
     @Incubating
-    public void setToolResolver(ToolResolver toolResolver) {
+    public void setToolChain(JavaToolChain toolChain) {
+        // Implementation is generated
         throw new UnsupportedOperationException();
     }
 
-    private Platform getPlatform() {
-        return new DefaultJavaPlatform(JavaVersion.current());
+    @Internal
+    private JavaPlatform getPlatform() {
+        return DefaultJavaPlatform.current();
     }
 
     /**
@@ -170,8 +193,17 @@ public class Javadoc extends SourceTask {
      *
      * @return The directory.
      */
-    @OutputDirectory
+    @Internal
     public File getDestinationDir() {
+        return destinationDir;
+    }
+
+    @OutputDirectory
+    protected File getOutputDirectory() {
+        File destinationDir = getDestinationDir();
+        if (destinationDir == null) {
+            destinationDir = options.getDestinationDirectory();
+        }
         return destinationDir;
     }
 
@@ -185,6 +217,7 @@ public class Javadoc extends SourceTask {
     /**
      * Returns the amount of memory allocated to this task.
      */
+    @Internal
     public String getMaxMemory() {
         return maxMemory;
     }
@@ -221,6 +254,7 @@ public class Javadoc extends SourceTask {
      *
      * @see #setVerbose(boolean)
      */
+    @Internal
     public boolean isVerbose() {
         return options.isVerbose();
     }
@@ -242,7 +276,7 @@ public class Javadoc extends SourceTask {
      *
      * @return The classpath.
      */
-    @InputFiles
+    @Classpath
     public FileCollection getClasspath() {
         return classpath;
     }
@@ -297,6 +331,7 @@ public class Javadoc extends SourceTask {
         this.failOnError = failOnError;
     }
 
+    @Internal
     public File getOptionsFile() {
         return new File(getTemporaryDir(), "javadoc.options");
     }

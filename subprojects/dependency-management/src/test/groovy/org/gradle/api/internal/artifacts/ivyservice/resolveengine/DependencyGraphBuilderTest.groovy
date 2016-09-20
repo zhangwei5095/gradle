@@ -15,77 +15,68 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine
 
-import org.apache.ivy.core.module.descriptor.*
-import org.apache.ivy.core.module.id.ArtifactId
 import org.apache.ivy.core.module.id.ModuleRevisionId
-import org.apache.ivy.plugins.matcher.ExactPatternMatcher
-import org.apache.ivy.plugins.matcher.PatternMatcher
-import org.gradle.api.artifacts.*
+import org.gradle.api.artifacts.ModuleDependency
+import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.gradle.api.artifacts.ModuleVersionSelector
+import org.gradle.api.artifacts.ResolveException
 import org.gradle.api.artifacts.component.ComponentIdentifier
+import org.gradle.api.artifacts.component.ComponentSelector
 import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
-import org.gradle.api.internal.artifacts.DefaultModuleVersionSelector
 import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal
 import org.gradle.api.internal.artifacts.dsl.ModuleReplacementsData
-import org.gradle.api.internal.artifacts.ivyservice.CacheLockingManager
-import org.gradle.api.internal.artifacts.ivyservice.DefaultLenientConfiguration
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphBuilder
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphNode
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphPathResolver
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphVisitor
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.conflicts.DefaultConflictHandler
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult.DefaultResolvedConfigurationBuilder
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult.TransientConfigurationResultsBuilder
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedProjectConfigurationResultBuilder
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.DummyBinaryStore
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.DummyStore
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ResolutionResultBuilder
-import org.gradle.api.specs.Spec
-import org.gradle.internal.component.external.model.BuildableIvyModuleResolveMetaData
-import org.gradle.internal.component.external.model.ModuleComponentResolveMetaData
-import org.gradle.internal.component.local.model.DefaultProjectComponentIdentifier
-import org.gradle.internal.component.local.model.DslOriginDependencyMetaDataWrapper
-import org.gradle.internal.component.model.*
+import org.gradle.api.internal.artifacts.publish.DefaultPublishArtifact
+import org.gradle.api.internal.tasks.DefaultTaskDependency
+import org.gradle.internal.component.external.descriptor.DefaultExclude
+import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
+import org.gradle.internal.component.external.model.DefaultModuleComponentSelector
+import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata
+import org.gradle.internal.component.local.model.DslOriginDependencyMetadataWrapper
+import org.gradle.internal.component.model.ComponentOverrideMetadata
+import org.gradle.internal.component.model.ComponentResolveMetadata
+import org.gradle.internal.component.model.DependencyMetadata
+import org.gradle.internal.component.model.IvyArtifactName
+import org.gradle.internal.component.model.LocalComponentDependencyMetadata
 import org.gradle.internal.resolve.ModuleVersionNotFoundException
 import org.gradle.internal.resolve.ModuleVersionResolveException
-import org.gradle.internal.resolve.resolver.ArtifactResolver
 import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver
 import org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver
-import org.gradle.internal.resolve.resolver.ModuleToComponentResolver
-import org.gradle.internal.resolve.result.BuildableArtifactSetResolveResult
+import org.gradle.internal.resolve.resolver.ResolveContextToComponentResolver
 import org.gradle.internal.resolve.result.BuildableComponentIdResolveResult
 import org.gradle.internal.resolve.result.BuildableComponentResolveResult
 import spock.lang.Specification
 
 import static org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier.newId
 import static org.gradle.api.internal.artifacts.DefaultModuleVersionSelector.newSelector
-import static org.gradle.api.internal.artifacts.ivyservice.IvyUtil.createModuleRevisionId
+import static org.gradle.internal.component.local.model.TestComponentIdentifiers.newProjectId
 
 class DependencyGraphBuilderTest extends Specification {
     def configuration = Mock(ConfigurationInternal)
     def conflictResolver = Mock(ModuleConflictResolver)
     def idResolver = Mock(DependencyToComponentIdResolver)
     def metaDataResolver = Mock(ComponentMetaDataResolver)
-    def artifactResolver = Mock(ArtifactResolver)
-    def resultBuilder = Mock(ResolutionResultBuilder)
-    def projectModelBuilder = Mock(ResolvedProjectConfigurationResultBuilder)
-    def TestMetaData root = project('root')
-    def moduleResolver = Mock(ModuleToComponentResolver)
-    def dependencyToConfigurationResolver = new DefaultDependencyToConfigurationResolver()
+    def root = project('root', '1.0', ['root'])
+    def moduleResolver = Mock(ResolveContextToComponentResolver)
     def moduleReplacements = Mock(ModuleReplacementsData)
-    def builder = new DependencyGraphBuilder(idResolver, metaDataResolver, moduleResolver, artifactResolver, new DefaultConflictHandler(conflictResolver, moduleReplacements), dependencyToConfigurationResolver)
+    DependencyGraphBuilder builder
 
     def setup() {
-        config(root, 'root', 'default')
         _ * configuration.name >> 'root'
         _ * configuration.path >> 'root'
-        _ * moduleResolver.resolve(_, _, _) >> { it[2].resolved(root) }
+        _ * moduleResolver.resolve(_, _) >> { it[1].resolved(root) }
 
-        _ * artifactResolver.resolveModuleArtifacts(_, _, _,) >> { ComponentResolveMetaData module, ComponentUsage context, BuildableArtifactSetResolveResult result ->
-            result.resolved(module.artifacts)
-        }
+        builder = new DependencyGraphBuilder(idResolver, metaDataResolver, moduleResolver, new DefaultConflictHandler(conflictResolver, moduleReplacements))
     }
 
-    private DefaultLenientConfiguration resolve() {
-        def results = new DefaultResolvedConfigurationBuilder(new TransientConfigurationResultsBuilder(new DummyBinaryStore(), new DummyStore()))
-        builder.resolve(configuration, resultBuilder, results, projectModelBuilder)
-        new DefaultLenientConfiguration(configuration, results, Stub(CacheLockingManager))
+    private TestGraphVisitor resolve() {
+        def graphVisitor = new TestGraphVisitor()
+        builder.resolve(configuration, graphVisitor)
+        return graphVisitor
     }
 
     def "does not resolve a given module selector more than once"() {
@@ -103,52 +94,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c)
-    }
-
-    def "correctly notifies the resolution result builder"() {
-        given:
-        def a = revision("a")
-        def b = revision("b")
-        def c = revision("c")
-        def d = revision("d")
-        traverses root, a
-        traverses root, b
-        traverses a, c
-        traversesMissing a, d
-
-        when:
-        resolve()
-
-        then:
-        1 * resultBuilder.start(newId("group", "root", "1.0"), new DefaultProjectComponentIdentifier(":root"))
-        then:
-        1 * resultBuilder.resolvedConfiguration({ it.name == 'root' }, { it*.requested.module == ['a', 'b'] })
-        then:
-        1 * resultBuilder.resolvedConfiguration({ it.name == 'a' }, { it*.requested.module == ['c', 'd'] && it*.failure.count { it != null } == 1 })
-    }
-
-    def "correctly notifies the project configuration result builder"() {
-        given:
-        def a = project("a")
-        def b = project("b")
-        def c = project("c")
-        def d = revision("d")
-        traverses root, a
-        traverses root, b
-        traverses a, c
-        traversesMissing a, d
-
-        when:
-        resolve()
-
-        then:
-        1 * projectModelBuilder.registerRoot({ it.projectPath == ':root'})
-        1 * projectModelBuilder.addProjectComponentResult({ it.projectPath == ':root'}, { it == 'root' })
-        1 * projectModelBuilder.addProjectComponentResult({ it.projectPath == ':a'}, { it == 'default' })
-        1 * projectModelBuilder.addProjectComponentResult({ it.projectPath == ':b'}, { it == 'default' })
-        1 * projectModelBuilder.addProjectComponentResult({ it.projectPath == ':c'}, { it == 'default' })
-        0 * projectModelBuilder._
+        result.components == ids(root, a, b, c)
     }
 
     def "honors component replacements"() {
@@ -177,7 +123,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(b, d)
+        result.components == ids(root, b, d)
     }
 
     def "does not resolve a given dynamic module selector more than once"() {
@@ -198,10 +144,10 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c, d)
+        result.components == ids(root, a, b, c, d)
     }
 
-    def "does not include evicted module when selected module already traversed before conflict detected"() {
+    def "does not include evicted module or dependencies when selected module already traversed before conflict detected"() {
         given:
         def selected = revision('a', '1.2')
         def evicted = revision('a', '1.1')
@@ -223,16 +169,16 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         1 * conflictResolver.select(!null) >> {
             Collection<ComponentResolutionState> candidates = it[0]
-            assert candidates*.version == ['1.2', '1.1']
+            assert candidates*.version as Set == ['1.2', '1.1'] as Set
             return candidates.find { it.version == '1.2' }
         }
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selected, b, c, d)
+        result.components == ids(root, selected, b, c, d)
     }
 
-    def "does not include evicted module when evicted module already traversed before conflict detected"() {
+    def "does not include evicted module or dependencies when evicted module already traversed before conflict detected"() {
         given:
         def selected = revision('a', '1.2')
         def evicted = revision('a', '1.1')
@@ -260,7 +206,7 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selected, b, d, e)
+        result.components == ids(root, selected, b, d, e)
     }
 
     def "does not include evicted module when path through evicted module is queued for traversal when conflict detected"() {
@@ -291,7 +237,104 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selected, b, e)
+        result.components == ids(root, selected, b, e)
+    }
+
+    def "includes dependencies of evicted module another path to dependency"() {
+        given:
+        def selected = revision('a', '1.2')
+        def evicted = revision('a', '1.1')
+        def b = revision('b')
+        def c = revision('c')
+        def d = revision('d')
+        traverses root, evicted
+        traverses evicted, c
+        traverses evicted, d
+        traverses root, b
+        traverses b, selected
+        doesNotResolve selected, c
+
+        when:
+        def result = resolve()
+        result.rethrowFailure()
+
+        then:
+        1 * conflictResolver.select(!null) >> {
+            Collection<ComponentResolutionState> candidates = it[0]
+            assert candidates*.version as Set == ['1.2', '1.1'] as Set
+            return candidates.find { it.version == '1.2' }
+        }
+        0 * conflictResolver._
+
+        and:
+        result.components == ids(root, selected, b, c)
+    }
+
+    def "does not include evicted module with multiple incoming paths"() {
+        given:
+        def selected = revision('a', '1.2')
+        def evicted = revision('a', '1.1')
+        def b = revision('b')
+        def c = revision('c')
+        def d = revision('d')
+        traverses root, evicted
+        traverses root, b
+        doesNotResolve b, evicted
+        traverses root, c
+        traverses c, selected
+        traverses selected, d
+
+        when:
+        def result = resolve()
+        result.rethrowFailure()
+
+        then:
+        1 * conflictResolver.select(!null) >> {
+            Collection<ComponentResolutionState> candidates = it[0]
+            assert candidates*.version == ['1.1', '1.2']
+            return candidates.find { it.version == '1.2' }
+        }
+        0 * conflictResolver._
+
+        and:
+        result.components == ids(root, selected, b, c, d)
+    }
+
+    def "does not include evicted module required by another evicted module"() {
+        given:
+        def selectedA = revision('a', '1.2')
+        def evictedA = revision('a', '1.1')
+        def selectedB = revision('b', '2.2')
+        def evictedB = revision('b', '2.1')
+        def c = revision('c')
+        def d = revision('d')
+        traverses root, evictedA
+        traverses evictedA, evictedB
+        traverses root, c
+        doesNotResolve c, evictedB
+        traverses root, d
+        traverses d, selectedA
+        traverses selectedA, selectedB
+
+        when:
+        def result = resolve()
+        result.rethrowFailure()
+
+        then:
+        1 * conflictResolver.select(!null) >> {
+            Collection<ComponentResolutionState> candidates = it[0]
+            assert candidates*.version == ['1.1', '1.2']
+            return candidates.find { it.version == '1.2' }
+        }
+        1 * conflictResolver.select(!null) >> {
+            Collection<ComponentResolutionState> candidates = it[0]
+            assert candidates*.version == ['2.1', '2.2']
+            return candidates.find { it.version == '2.2' }
+        }
+        0 * conflictResolver._
+
+        and:
+        result.components == ids(root, selectedA, selectedB, c, d)
     }
 
     def "resolves when path through selected module is queued for traversal when conflict detected"() {
@@ -312,13 +355,13 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         1 * conflictResolver.select(!null) >> {
             Collection<ComponentResolutionState> candidates = it[0]
-            assert candidates*.version == ['1.2', '1.1']
+            assert candidates*.version as Set == ['1.2', '1.1'] as Set
             return candidates.find { it.version == '1.2' }
         }
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selected, b)
+        result.components == ids(root, selected, b)
     }
 
     def "does not include evicted module when another path through evicted module traversed after conflict detected"() {
@@ -348,7 +391,7 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selected, b, c)
+        result.components == ids(root, selected, b, c)
     }
 
     def "restarts conflict resolution when later conflict on same module discovered"() {
@@ -386,7 +429,7 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(selectedA, c, selectedB)
+        result.components == ids(root, selectedA, c, selectedB)
     }
 
     def "does not include module version that is excluded after conflict resolution has been applied"() {
@@ -417,7 +460,7 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(a, selected, d, e)
+        result.components == ids(root, a, selected, d, e)
     }
 
     def "does not include dependencies of module version that is no longer transitive after conflict resolution has been applied"() {
@@ -448,7 +491,7 @@ class DependencyGraphBuilderTest extends Specification {
         0 * conflictResolver._
 
         and:
-        modules(result) == ids(a, selected, d, e)
+        result.components == ids(root, a, selected, d, e)
     }
 
     def "does not attempt to resolve a dependency whose target module is excluded earlier in the path"() {
@@ -465,31 +508,10 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b)
+        result.components == ids(root, a, b)
     }
 
-    def "does not include the artifacts of evicted modules"() {
-        given:
-        def selected = revision('a', '1.2')
-        def evicted = revision('a', '1.1')
-        traverses root, selected
-        doesNotTraverse root, evicted
-
-        when:
-        def result = resolve()
-        result.rethrowFailure()
-
-        then:
-        1 * conflictResolver.select(!null) >> {
-            Collection<ComponentResolutionState> candidates = it[0]
-            return candidates.find { it.version == '1.2' }
-        }
-
-        and:
-        artifacts(result) == ids(selected)
-    }
-
-    def "does not include the artifacts of excluded modules when excluded by all paths"() {
+    def "does not include excluded modules when excluded by all paths"() {
         given:
         def a = revision('a')
         def b = revision('b')
@@ -506,8 +528,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, d)
-        artifacts(result) == ids(a, b, d)
+        result.components == ids(root, a, b, d)
     }
 
     def "includes a module version when there is a path to the version that does not exclude it"() {
@@ -527,8 +548,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c, d)
-        artifacts(result) == ids(a, b, c, d)
+        result.components == ids(root, a, b, c, d)
     }
 
     def "ignores a new incoming path that includes a subset of those already included"() {
@@ -546,8 +566,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c)
-        artifacts(result) == ids(a, b, c)
+        result.components == ids(root, a, b, c)
     }
 
     def "ignores a new incoming path that includes the same set of module versions"() {
@@ -569,8 +588,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c, d)
-        artifacts(result) == ids(a, b, c, d)
+        result.components == ids(root, a, b, c, d)
     }
 
     def "restarts traversal when new incoming path excludes fewer module versions"() {
@@ -588,8 +606,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b, c)
-        artifacts(result) == ids(a, b, c)
+        result.components == ids(root, a, b, c)
     }
 
     def "does not traverse outgoing paths of a non-transitive dependency"() {
@@ -606,8 +623,7 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(a, b)
-        artifacts(result) == ids(a, b)
+        result.components == ids(root, a, b)
     }
 
     def "reports shortest incoming paths for a failed dependency"() {
@@ -625,10 +641,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'c', '1.0')
-        unresolved.problem instanceof ModuleVersionResolveException
+        result.unresolvedDependencies == [newSelector('group', 'c', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -636,9 +649,9 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionResolveException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0"
-        e.cause.message.contains "group:root:1.0 > group:b:1.0"
-        !e.cause.message.contains("group:root:1.0 > group:b:1.0 > group:a:1.0")
+        e.cause.message.contains "project :root > group:a:1.0"
+        e.cause.message.contains "project :root > group:b:1.0"
+        !e.cause.message.contains("project :root > group:b:1.0 > group:a:1.0")
     }
 
     def "reports failure to resolve version selector to module version"() {
@@ -655,10 +668,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'unknown', '1.0')
-        unresolved.problem instanceof ModuleVersionResolveException
+        result.unresolvedDependencies == [newSelector('group', 'unknown', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -666,8 +676,8 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionResolveException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0"
-        e.cause.message.contains "group:root:1.0 > group:b:1.0"
+        e.cause.message.contains "project :root > group:a:1.0"
+        e.cause.message.contains "project :root > group:b:1.0"
     }
 
     def "merges all failures for all dependencies with a given module version selector"() {
@@ -684,10 +694,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'c', '1.0')
-        unresolved.problem instanceof ModuleVersionResolveException
+        result.unresolvedDependencies == [newSelector('group', 'c', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -695,8 +702,8 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionResolveException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0"
-        e.cause.message.contains "group:root:1.0 > group:b:1.0"
+        e.cause.message.contains "project :root > group:a:1.0"
+        e.cause.message.contains "project :root > group:b:1.0"
     }
 
     def "reports shortest incoming paths for a missing module version"() {
@@ -714,10 +721,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'c', '1.0')
-        unresolved.problem instanceof ModuleVersionNotFoundException
+        result.unresolvedDependencies == [newSelector('group', 'c', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -725,9 +729,9 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionNotFoundException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0"
-        e.cause.message.contains "group:root:1.0 > group:b:1.0"
-        !e.cause.message.contains("group:root:1.0 > group:b:1.0 > group:a:1.0")
+        e.cause.message.contains "project :root > group:a:1.0"
+        e.cause.message.contains "project :root > group:b:1.0"
+        !e.cause.message.contains("project :root > group:b:1.0 > group:a:1.0")
     }
 
     def "merges all dependencies with a given module version selector when reporting missing version"() {
@@ -744,10 +748,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'c', '1.0')
-        unresolved.problem instanceof ModuleVersionResolveException
+        result.unresolvedDependencies == [newSelector('group', 'c', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -755,8 +756,8 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionNotFoundException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0"
-        e.cause.message.contains "group:root:1.0 > group:b:1.0"
+        e.cause.message.contains "project :root > group:a:1.0"
+        e.cause.message.contains "project :root > group:b:1.0"
     }
 
     def "can handle a cycle in the incoming paths of a broken module"() {
@@ -773,10 +774,7 @@ class DependencyGraphBuilderTest extends Specification {
         def result = resolve()
 
         then:
-        result.unresolvedModuleDependencies.size() == 1
-        def unresolved = result.unresolvedModuleDependencies.iterator().next()
-        unresolved.selector == new DefaultModuleVersionSelector('group', 'c', '1.0')
-        unresolved.problem instanceof ModuleVersionResolveException
+        result.unresolvedDependencies == [newSelector('group', 'c', '1.0')] as Set
 
         when:
         result.rethrowFailure()
@@ -784,7 +782,7 @@ class DependencyGraphBuilderTest extends Specification {
         then:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionNotFoundException
-        e.cause.message.contains "group:root:1.0 > group:a:1.0 > group:b:1.0"
+        e.cause.message.contains "project :root > group:a:1.0 > group:b:1.0"
     }
 
     def "does not report a path through an evicted version"() {
@@ -819,10 +817,10 @@ class DependencyGraphBuilderTest extends Specification {
         ResolveException ex = thrown()
         ex.cause instanceof ModuleVersionNotFoundException
         !ex.cause.message.contains("group:a:1.1")
-        ex.cause.message.contains "group:root:1.0 > group:a:1.2"
+        ex.cause.message.contains "project :root > group:a:1.2"
 
         and:
-        modules(result) == ids(selected, d, e)
+        result.components == ids(root, selected, d, e)
     }
 
     def "fails when conflict resolution selects a version that does not exist"() {
@@ -847,7 +845,7 @@ class DependencyGraphBuilderTest extends Specification {
         and:
         ResolveException e = thrown()
         e.cause instanceof ModuleVersionNotFoundException
-        e.cause.message.contains("group:root:1.0")
+        e.cause.message.contains("project :root")
     }
 
     def "does not fail when conflict resolution evicts a version that does not exist"() {
@@ -870,7 +868,7 @@ class DependencyGraphBuilderTest extends Specification {
         }
 
         and:
-        modules(result) == ids(selected, b)
+        result.components == ids(root, selected, b)
     }
 
     def "does not fail when a broken version is evicted"() {
@@ -895,7 +893,7 @@ class DependencyGraphBuilderTest extends Specification {
         }
 
         and:
-        modules(result) == ids(selected, c)
+        result.components == ids(root, selected, c)
     }
 
     def "direct dependency can force a particular version"() {
@@ -912,64 +910,61 @@ class DependencyGraphBuilderTest extends Specification {
         result.rethrowFailure()
 
         then:
-        modules(result) == ids(forced, b)
+        result.components == ids(root, forced, b)
     }
 
     def revision(String name, String revision = '1.0') {
-        def descriptor = new DefaultModuleDescriptor(createModuleRevisionId("group", name, revision), "release", new Date())
-        def metaData = new TestModuleMetaData(descriptor)
-        config(metaData, 'default')
-        descriptor.addArtifact('default', new DefaultArtifact(descriptor.moduleRevisionId, new Date(), "art1", "art", "zip"))
+        // TODO Shouldn't really be using the local component implementation here
+        def id = newId("group", name, revision)
+        def metaData = new DefaultLocalComponentMetadata(id, DefaultModuleComponentIdentifier.newId(id), "release")
+        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ["default"] as Set<String>, true, true, null, new DefaultTaskDependency())
+        metaData.addArtifacts("default", [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
         return metaData
     }
 
-    def project(String name, String revision = '1.0') {
-        def revisionId = createModuleRevisionId("group", name, revision)
-        def descriptor = new DefaultModuleDescriptor(revisionId, "release", new Date())
-        def metaData = new TestProjectMetaData(newId(revisionId), descriptor, DefaultProjectComponentIdentifier.newId(":${name}"))
-        config(metaData, 'default')
-        descriptor.addArtifact('default', new DefaultArtifact(descriptor.moduleRevisionId, new Date(), "art1", "art", "zip"))
+    def project(String name, String revision = '1.0', List<String> extraConfigs = []) {
+        def metaData = new DefaultLocalComponentMetadata(newId("group", name, revision), newProjectId(":${name}"), "release")
+        metaData.addConfiguration("default", "defaultConfig", [] as Set<String>, ["default"] as Set<String>, true, true, null, new DefaultTaskDependency())
+        extraConfigs.each { String config ->
+            metaData.addConfiguration(config, "${config}Config", ["default"] as Set<String>, ["default", config] as Set<String>, true, true, null, new DefaultTaskDependency())
+        }
+        metaData.addArtifacts("default", [new DefaultPublishArtifact("art1", "zip", "art", null, new Date(), new File("art1.zip"))])
         return metaData
     }
 
-    def config(ComponentResolveMetaData metaData, String name, String... extendsFrom) {
-        def configuration = new org.apache.ivy.core.module.descriptor.Configuration(name, org.apache.ivy.core.module.descriptor.Configuration.Visibility.PUBLIC, null, extendsFrom, true, null)
-        metaData.descriptor.addConfiguration(configuration)
-        return configuration
-    }
-
-    def traverses(Map<String, ?> args = [:], TestMetaData from, ComponentResolveMetaData to) {
-        def dependencyMetaData = dependsOn(args, from, to.descriptor.moduleRevisionId)
+    def traverses(Map<String, ?> args = [:], def from, ComponentResolveMetadata to) {
+        def dependencyMetaData = dependsOn(args, from, to.id)
         selectorResolvesTo(dependencyMetaData, to.componentId, to.id)
-        1 * metaDataResolver.resolve(dependencyMetaData, to.componentId, _) >> { DependencyMetaData dep, ComponentIdentifier id, BuildableComponentResolveResult result ->
+
+        1 * metaDataResolver.resolve(to.componentId, _, _) >> { ComponentIdentifier id, ComponentOverrideMetadata requestMetaData, BuildableComponentResolveResult result ->
             result.resolved(to)
         }
     }
 
-    def doesNotTraverse(Map<String, ?> args = [:], TestMetaData from, ComponentResolveMetaData to) {
-        def dependencyMetaData = dependsOn(args, from, to.descriptor.moduleRevisionId)
+    def doesNotTraverse(Map<String, ?> args = [:], def from, ComponentResolveMetadata to) {
+        def dependencyMetaData = dependsOn(args, from, to.id)
         selectorResolvesTo(dependencyMetaData, to.componentId, to.id)
-        0 * metaDataResolver.resolve(_, to.componentId, _)
+        0 * metaDataResolver.resolve(to.componentId, _, _)
     }
 
-    def doesNotResolve(Map<String, ?> args = [:], TestMetaData from, ComponentResolveMetaData to) {
-        def dependencyMetaData = dependsOn(args, from, to.descriptor.moduleRevisionId)
+    def doesNotResolve(Map<String, ?> args = [:], def from, ComponentResolveMetadata to) {
+        def dependencyMetaData = dependsOn(args, from, to.id)
         0 * idResolver.resolve(dependencyMetaData, _)
-        0 * metaDataResolver.resolve(_, to.componentId, _)
+        0 * metaDataResolver.resolve(to.componentId, _, _)
     }
 
-    def traversesMissing(Map<String, ?> args = [:], TestMetaData from, ComponentResolveMetaData to) {
-        def dependencyMetaData = dependsOn(args, from, to.descriptor.moduleRevisionId)
+    def traversesMissing(Map<String, ?> args = [:], def from, ComponentResolveMetadata to) {
+        def dependencyMetaData = dependsOn(args, from, to.id)
         selectorResolvesTo(dependencyMetaData, to.componentId, to.id)
-        1 * metaDataResolver.resolve(_, to.componentId, _) >> { DependencyMetaData dep, ComponentIdentifier id, BuildableComponentResolveResult result ->
-            result.notFound(to.id)
+        1 * metaDataResolver.resolve(to.componentId, _, _) >> { ComponentIdentifier id, ComponentOverrideMetadata requestMetaData, BuildableComponentResolveResult result ->
+            result.notFound(to.componentId)
         }
     }
 
-    def traversesBroken(Map<String, ?> args = [:], TestMetaData from, ComponentResolveMetaData to) {
-        def dependencyMetaData = dependsOn(args, from, to.descriptor.moduleRevisionId)
+    def traversesBroken(Map<String, ?> args = [:], def from, ComponentResolveMetadata to) {
+        def dependencyMetaData = dependsOn(args, from, to.id)
         selectorResolvesTo(dependencyMetaData, to.componentId, to.id)
-        1 * metaDataResolver.resolve(_, to.componentId, _) >> { DependencyMetaData dep, ComponentIdentifier id, BuildableComponentResolveResult result ->
+        1 * metaDataResolver.resolve(to.componentId, _, _) >> { ComponentIdentifier id, ComponentOverrideMetadata requestMetaData, BuildableComponentResolveResult result ->
             result.failed(new ModuleVersionResolveException(newSelector("a", "b", "c"), "broken"))
         }
     }
@@ -982,114 +977,95 @@ class DependencyGraphBuilderTest extends Specification {
         moduleVersionIdentifier
     }
 
-    def brokenSelector(Map<String, ?> args = [:], TestMetaData from, String to) {
-        def dependencyMetaData = dependsOn(args, from, createModuleRevisionId("group", to, "1.0"))
-        1 * idResolver.resolve(dependencyMetaData, _) >> { DependencyMetaData dep, BuildableComponentIdResolveResult result ->
+    def brokenSelector(Map<String, ?> args = [:], def from, String to) {
+        def dependencyMetaData = dependsOn(args, from, newId("group", to, "1.0"))
+        1 * idResolver.resolve(dependencyMetaData, _) >> { DependencyMetadata dep, BuildableComponentIdResolveResult result ->
             result.failed(new ModuleVersionResolveException(newSelector("a", "b", "c"), "broken"))
         }
     }
 
-    def dependsOn(Map<String, ?> args = [:], TestMetaData from, ModuleRevisionId to) {
-        def dependencyId = args.revision ? createModuleRevisionId(to.moduleId.organisation, to.moduleId.name, args.revision) : to
+    def dependsOn(Map<String, ?> args = [:], ComponentResolveMetadata from, ModuleVersionIdentifier to) {
+        ModuleVersionIdentifier dependencyId = args.revision ? newId(to.group, to.name, args.revision) : to
         boolean transitive = args.transitive == null || args.transitive
         boolean force = args.force
-        def descriptor = new DefaultDependencyDescriptor(from.descriptor, dependencyId, force, false, transitive)
-        descriptor.addDependencyConfiguration("default", "default")
+        ModuleVersionSelector selector = newSelector(dependencyId.group, dependencyId.name, dependencyId.version)
+        ComponentSelector componentSelector = DefaultModuleComponentSelector.newSelector(selector)
+        def excludeRules = []
         if (args.exclude) {
-            descriptor.addExcludeRule("default", new DefaultExcludeRule(new ArtifactId(
-                    args.exclude.descriptor.moduleRevisionId.moduleId, PatternMatcher.ANY_EXPRESSION,
-                    PatternMatcher.ANY_EXPRESSION,
-                    PatternMatcher.ANY_EXPRESSION),
-                    ExactPatternMatcher.INSTANCE, null))
+            ComponentResolveMetadata excluded = args.exclude
+            excludeRules << new DefaultExclude(excluded.id.group, excluded.id.name)
         }
-        def dependencyMetaData = new DslOriginDependencyMetaDataWrapper(new DefaultDependencyMetaData(descriptor), Stub(ModuleDependency))
-        from.addDependency(dependencyMetaData)
+        def dependencyMetaData = new LocalComponentDependencyMetadata(componentSelector, selector, "default", null, "default", [] as Set<IvyArtifactName>,
+            excludeRules, force, false, transitive)
+        dependencyMetaData = new DslOriginDependencyMetadataWrapper(dependencyMetaData, Stub(ModuleDependency))
+        from.getDependencies().add(dependencyMetaData)
         return dependencyMetaData
     }
 
-    def selectorResolvesTo(DependencyMetaData dependencyMetaData, ComponentIdentifier id, ModuleVersionIdentifier mvId) {
-        1 * idResolver.resolve(dependencyMetaData, _) >> { DependencyMetaData dep, BuildableComponentIdResolveResult result ->
+    def selectorResolvesTo(DependencyMetadata dependencyMetaData, ComponentIdentifier id, ModuleVersionIdentifier mvId) {
+        1 * idResolver.resolve(dependencyMetaData, _) >> { DependencyMetadata dep, BuildableComponentIdResolveResult result ->
             result.resolved(id, mvId)
         }
     }
 
-    def ids(ModuleComponentResolveMetaData... descriptors) {
+    def ids(ComponentResolveMetadata... descriptors) {
         return descriptors.collect { it.id } as Set
     }
 
-    def modules(LenientConfiguration config) {
-        Set<ModuleVersionIdentifier> result = new LinkedHashSet<ModuleVersionIdentifier>()
-        List<ResolvedDependency> queue = []
-        queue.addAll(config.getFirstLevelModuleDependencies({ true } as Spec))
-        while (!queue.empty) {
-            def node = queue.remove(0)
-            result.add(node.module.id)
-            queue.addAll(0, node.children)
-        }
-        return result
-    }
+    static class TestGraphVisitor implements DependencyGraphVisitor {
+        def root
+        def components = new LinkedHashSet()
+        final Map<ModuleVersionSelector, FailureDetails> failures = new LinkedHashMap<>()
 
-    def artifacts(LenientConfiguration config) {
-        return config.resolvedArtifacts.collect { it.moduleVersion.id } as Set
-    }
-
-    private interface TestMetaData extends ComponentResolveMetaData {
-        void addDependency(DependencyMetaData dependencyMetaData)
-    }
-
-    private static class TestModuleMetaData extends BuildableIvyModuleResolveMetaData implements TestMetaData {
-        def deps = []
-
-        TestModuleMetaData(DefaultModuleDescriptor module) {
-            super(module)
+        Set<ModuleVersionSelector> getUnresolvedDependencies() {
+            return failures.keySet()
         }
 
         @Override
-        void addDependency(DependencyMetaData dependencyMetaData) {
-            deps.add(dependencyMetaData)
+        void start(DependencyGraphNode root) {
+            this.root = root
         }
 
         @Override
-        protected List<DependencyMetaData> populateDependenciesFromDescriptor() {
-            return deps
-        }
-    }
-
-    private static class TestProjectMetaData extends AbstractModuleDescriptorBackedMetaData implements TestMetaData {
-        def deps = []
-
-        TestProjectMetaData(ModuleVersionIdentifier moduleVersionIdentifier, ModuleDescriptor module, ComponentIdentifier componentIdentifier) {
-            super(moduleVersionIdentifier, module, componentIdentifier)
+        void visitNode(DependencyGraphNode resolvedConfiguration) {
+            components.add(resolvedConfiguration.owner.moduleVersion)
         }
 
         @Override
-        void addDependency(DependencyMetaData dependencyMetaData) {
-            deps.add(dependencyMetaData)
+        void visitEdge(DependencyGraphNode resolvedConfiguration) {
+            resolvedConfiguration.outgoingEdges.each {
+                if (it.failure) {
+                    def breakage = failures.get(it.requestedModuleVersion)
+                    if (breakage == null) {
+                        breakage = new FailureDetails(it.failure)
+                        failures.put(it.requestedModuleVersion, breakage)
+                    }
+                    breakage.requiredBy << it.from
+                }
+            }
+        }
+
+        void rethrowFailure() {
+            if (failures.isEmpty()) {
+                return
+            }
+
+            throw new ResolveException("config", failures.values().collect {
+                it.failure.withIncomingPaths(DependencyGraphPathResolver.calculatePaths(it.requiredBy, root))
+            })
         }
 
         @Override
-        protected List<DependencyMetaData> populateDependenciesFromDescriptor() {
-            return deps
+        void finish(DependencyGraphNode root) {
         }
 
-        @Override
-        protected Set<ComponentArtifactMetaData> getArtifactsForConfiguration(ConfigurationMetaData configuration) {
-            return []
-        }
+        static class FailureDetails {
+            final List<DependencyGraphNode> requiredBy = []
+            final ModuleVersionResolveException failure
 
-        @Override
-        ComponentResolveMetaData withSource(ModuleSource source) {
-            return null
-        }
-
-        @Override
-        ComponentArtifactMetaData artifact(Artifact artifact) {
-            return null
-        }
-
-        @Override
-        Set<? extends ComponentArtifactMetaData> getArtifacts() {
-            return []
+            FailureDetails(ModuleVersionResolveException failure) {
+                this.failure = failure
+            }
         }
     }
 }

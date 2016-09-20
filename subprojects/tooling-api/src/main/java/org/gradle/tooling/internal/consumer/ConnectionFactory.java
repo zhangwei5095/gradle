@@ -19,9 +19,11 @@ import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.internal.consumer.async.AsyncConsumerActionExecutor;
 import org.gradle.tooling.internal.consumer.async.DefaultAsyncConsumerActionExecutor;
+import org.gradle.tooling.internal.consumer.connection.CancellableConsumerActionExecutor;
 import org.gradle.tooling.internal.consumer.connection.ConsumerActionExecutor;
 import org.gradle.tooling.internal.consumer.connection.LazyConsumerActionExecutor;
 import org.gradle.tooling.internal.consumer.connection.ProgressLoggingConsumerActionExecutor;
+import org.gradle.tooling.internal.consumer.connection.RethrowingErrorsConsumerActionExecutor;
 import org.gradle.tooling.internal.consumer.loader.ToolingImplementationLoader;
 
 public class ConnectionFactory {
@@ -37,8 +39,10 @@ public class ConnectionFactory {
 
     public ProjectConnection create(Distribution distribution, ConnectionParameters parameters) {
         ConsumerActionExecutor lazyConnection = new LazyConsumerActionExecutor(distribution, toolingImplementationLoader, loggingProvider, parameters);
-        ConsumerActionExecutor progressLoggingConnection = new ProgressLoggingConsumerActionExecutor(lazyConnection, loggingProvider);
-        AsyncConsumerActionExecutor asyncConnection = new DefaultAsyncConsumerActionExecutor(progressLoggingConnection, executorFactory);
+        ConsumerActionExecutor cancellableConnection = new CancellableConsumerActionExecutor(lazyConnection);
+        ConsumerActionExecutor progressLoggingConnection = new ProgressLoggingConsumerActionExecutor(cancellableConnection, loggingProvider);
+        ConsumerActionExecutor rethrowingErrorsConnection = new RethrowingErrorsConsumerActionExecutor(progressLoggingConnection);
+        AsyncConsumerActionExecutor asyncConnection = new DefaultAsyncConsumerActionExecutor(rethrowingErrorsConnection, executorFactory);
         return new DefaultProjectConnection(asyncConnection, parameters);
     }
 

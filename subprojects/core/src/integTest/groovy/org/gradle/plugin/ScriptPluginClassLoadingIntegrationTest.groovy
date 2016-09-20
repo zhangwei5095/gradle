@@ -37,17 +37,17 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
         """
 
         file("plugin1.gradle") << """
-            task sayMessageFrom1 << { println new pkg.Thing().getMessage() }
+            task sayMessageFrom1 { doLast { println new pkg.Thing().getMessage() } }
             apply from: 'plugin2.gradle'
         """
 
         file("plugin2.gradle") << """
-            task sayMessageFrom2 << { println new pkg.Thing().getMessage() }
+            task sayMessageFrom2 { doLast { println new pkg.Thing().getMessage() } }
             apply from: 'plugin3.gradle'
         """
 
         file("plugin3.gradle") << """
-            task sayMessageFrom3 << { println new pkg.Thing().getMessage() }
+            task sayMessageFrom3 { doLast { println new pkg.Thing().getMessage() } }
         """
 
         buildScript "apply from: 'plugin1.gradle'"
@@ -166,8 +166,8 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
           }
         """
 
-        file("script1.gradle") << "task hello1 << { println 'hello from script1' }"
-        file("script2.gradle") << "task hello2 << { println 'hello from script2' }"
+        file("script1.gradle") << "task hello1 { doLast { println 'hello from script1' } }"
+        file("script2.gradle") << "task hello2 { doLast { println 'hello from script2' } }"
 
         when:
         succeeds "hello1", "hello2"
@@ -213,6 +213,8 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
                 assert false
             } catch (ClassNotFoundException ignore) {
                 println "not in root"
+            } finally {
+                getClass().classLoader.close()
             }
 
         """
@@ -232,6 +234,8 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
                 assert false
             } catch (ClassNotFoundException ignore) {
                 println "not in sub"
+            } finally {
+                getClass().classLoader.close()
             }
         """
 
@@ -243,7 +247,7 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
         output.contains "not in sub"
     }
 
-    def "script plugin cannot access classed added by buildscript in applying script"() {
+    def "script plugin cannot access classes added by buildscript in applying script"() {
         given:
         def jar = file("plugin.jar")
         pluginBuilder.addPlugin("project.task('hello')")
@@ -266,6 +270,8 @@ class ScriptPluginClassLoadingIntegrationTest extends AbstractIntegrationSpec {
                 assert false
             } catch (ClassNotFoundException ignore) {
                 println "not in script"
+            } finally {
+                getClass().classLoader.close()
             }
         """
 

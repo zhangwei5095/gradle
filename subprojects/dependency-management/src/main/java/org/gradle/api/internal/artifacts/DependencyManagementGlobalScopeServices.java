@@ -16,13 +16,20 @@
 
 package org.gradle.api.internal.artifacts;
 
-import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
-import org.gradle.api.internal.artifacts.component.DefaultComponentIdentifierFactory;
 import org.gradle.api.internal.artifacts.ivyservice.DefaultIvyContextManager;
 import org.gradle.api.internal.artifacts.ivyservice.IvyContextManager;
-import org.gradle.api.internal.artifacts.ivyservice.LocalComponentFactory;
-import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.*;
-import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.*;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.ConfigurationComponentMetaDataBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.DefaultConfigurationComponentMetaDataBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DefaultDependenciesToModuleDescriptorConverter;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DefaultDependencyDescriptorFactory;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DefaultExcludeRuleConverter;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DependenciesToModuleDescriptorConverter;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DependencyDescriptorFactory;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.ExcludeRuleConverter;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.ExternalModuleIvyDependencyDescriptorFactory;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.ProjectIvyDependencyDescriptorFactory;
+import org.gradle.internal.resource.connector.ResourceConnectorFactory;
+import org.gradle.internal.resource.transport.file.FileConnectorFactory;
 
 class DependencyManagementGlobalScopeServices {
     IvyContextManager createIvyContextManager() {
@@ -33,36 +40,27 @@ class DependencyManagementGlobalScopeServices {
         return new DefaultExcludeRuleConverter();
     }
 
-    ComponentIdentifierFactory createComponentIdentifierFactory() {
-        return new DefaultComponentIdentifierFactory();
-    }
-
     ExternalModuleIvyDependencyDescriptorFactory createExternalModuleDependencyDescriptorFactory(ExcludeRuleConverter excludeRuleConverter) {
         return new ExternalModuleIvyDependencyDescriptorFactory(excludeRuleConverter);
     }
 
-    ConfigurationsToModuleDescriptorConverter createConfigurationsToModuleDescriptorConverter() {
-        return new DefaultConfigurationsToModuleDescriptorConverter();
-    }
-
     DependencyDescriptorFactory createDependencyDescriptorFactory(ExcludeRuleConverter excludeRuleConverter, ExternalModuleIvyDependencyDescriptorFactory descriptorFactory) {
         return new DefaultDependencyDescriptorFactory(
-                new ProjectIvyDependencyDescriptorFactory(
-                        excludeRuleConverter),
-                descriptorFactory);
+            new ProjectIvyDependencyDescriptorFactory(
+                excludeRuleConverter),
+            descriptorFactory);
     }
 
-    LocalComponentFactory createPublishLocalComponentFactory(ConfigurationsToModuleDescriptorConverter configurationsToModuleDescriptorConverter,
-                                                             DependencyDescriptorFactory dependencyDescriptorFactory,
-                                                             ExcludeRuleConverter excludeRuleConverter,
-                                                             ComponentIdentifierFactory componentIdentifierFactory) {
-        return new ResolveLocalComponentFactory(
-                configurationsToModuleDescriptorConverter,
-                new DefaultDependenciesToModuleDescriptorConverter(
-                        dependencyDescriptorFactory,
-                        excludeRuleConverter),
-                componentIdentifierFactory,
-                new DefaultConfigurationsToArtifactsConverter());
+    DependenciesToModuleDescriptorConverter createDependenciesToModuleDescriptorConverter(DependencyDescriptorFactory dependencyDescriptorFactory,
+                                                                                          ExcludeRuleConverter excludeRuleConverter) {
+        return new DefaultDependenciesToModuleDescriptorConverter(dependencyDescriptorFactory, excludeRuleConverter);
+    }
 
+    ConfigurationComponentMetaDataBuilder createConfigurationComponentMetaDataBuilder(DependenciesToModuleDescriptorConverter dependenciesConverter) {
+        return new DefaultConfigurationComponentMetaDataBuilder(dependenciesConverter);
+    }
+
+    ResourceConnectorFactory createFileConnectorFactory() {
+        return new FileConnectorFactory();
     }
 }

@@ -20,9 +20,11 @@ import org.gradle.integtests.fixtures.CrossVersionIntegrationSpec
 import org.gradle.integtests.fixtures.TargetVersions
 import org.gradle.test.fixtures.plugin.PluginBuilder
 import org.gradle.test.fixtures.server.http.MavenHttpModule
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.junit.Rule
 
 @TargetVersions(["2.1+"])
+@LeaksFileHandles
 class PluginResolutionCachingCrossVersionIntegrationTest extends CrossVersionIntegrationSpec {
 
     public static final String PLUGIN_ID = "org.my.myplugin"
@@ -50,8 +52,10 @@ class PluginResolutionCachingCrossVersionIntegrationTest extends CrossVersionInt
         service.start()
         file("build.gradle") << """
             plugins { id '$PLUGIN_ID' version '$VERSION' }
-            task pluginApplied << {
-                assert project.pluginApplied
+            task pluginApplied {
+                doLast {
+                    assert project.pluginApplied
+                }
             }
         """
 

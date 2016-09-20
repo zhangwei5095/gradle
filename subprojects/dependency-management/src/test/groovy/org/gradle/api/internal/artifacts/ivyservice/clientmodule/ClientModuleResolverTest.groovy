@@ -16,21 +16,22 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.clientmodule
 
-import org.apache.ivy.core.module.descriptor.ModuleDescriptor
 import org.gradle.api.artifacts.ClientModule
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.component.ComponentIdentifier
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DependencyDescriptorFactory
-import org.gradle.internal.component.external.model.ModuleComponentArtifactMetaData
-import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetaData
-import org.gradle.internal.component.local.model.DslOriginDependencyMetaData
-import org.gradle.internal.component.model.DependencyMetaData
+import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata
+import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata
+import org.gradle.internal.component.local.model.DslOriginDependencyMetadata
+import org.gradle.internal.component.model.ComponentOverrideMetadata
 import org.gradle.internal.resolve.ModuleVersionResolveException
 import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver
 import org.gradle.internal.resolve.result.BuildableComponentResolveResult
 import spock.lang.Specification
 
 import static org.gradle.api.internal.artifacts.DefaultModuleVersionSelector.newSelector
+import com.google.common.base.Optional
 
 class ClientModuleResolverTest extends Specification {
     final target = Mock(ComponentMetaDataResolver)
@@ -39,57 +40,57 @@ class ClientModuleResolverTest extends Specification {
 
     def id = Mock(ComponentIdentifier)
     def result = Mock(BuildableComponentResolveResult)
-    def metaData = Mock(MutableModuleComponentResolveMetaData)
-    def dependency = Mock(DslOriginDependencyMetaData)
+    def metaData = Mock(ModuleComponentResolveMetadata)
+    def mutableMetaData = Mock(MutableModuleComponentResolveMetadata)
+    def updatedMetaData = Mock(ModuleComponentResolveMetadata)
+    def componentRequestMetaData = Mock(ComponentOverrideMetadata)
+    def dependency = Mock(DslOriginDependencyMetadata)
 
     def "replaces meta-data for a client module dependency"() {
         def clientModule = Mock(ClientModule)
         def dep = Mock(ModuleDependency)
-        def moduleDescriptor = Mock(ModuleDescriptor)
-        def dependencyMetaData = Mock(DependencyMetaData)
-        def artifact = Mock(ModuleComponentArtifactMetaData)
+        def dependencyMetaData = Mock(DslOriginDependencyMetadata)
+        def artifact = Mock(ModuleComponentArtifactMetadata)
 
         when:
-        resolver.resolve(dependency, id, result)
+        resolver.resolve(id, componentRequestMetaData, result)
 
         then:
-        1 * target.resolve(dependency, id, result)
+        1 * target.resolve(id, componentRequestMetaData, result)
         1 * result.getFailure() >> null
-        1 * dependency.source >> clientModule
+        1 * componentRequestMetaData.clientModule >> clientModule
         1 * result.getMetaData() >> metaData
-        1 * metaData.copy() >> metaData
+        1 * metaData.asMutable() >> mutableMetaData
         1 * clientModule.getDependencies() >> ([dep] as Set)
-        1 * dep.getConfiguration() >> "config"
-        1 * metaData.getDescriptor() >> moduleDescriptor
-        1 * dependencyDescriptorFactory.createDependencyDescriptor("config", moduleDescriptor, dep) >> dependencyMetaData
-        1 * metaData.setDependencies([dependencyMetaData])
-        1 * metaData.artifact('jar', 'jar', null) >> artifact
-        1 * metaData.setArtifacts({
+        1 * dep.getTargetConfiguration() >> Optional.of("config")
+        1 * dependencyDescriptorFactory.createDependencyDescriptor("config", null, dep) >> dependencyMetaData
+        1 * mutableMetaData.setDependencies([dependencyMetaData])
+        1 * mutableMetaData.artifact('jar', 'jar', null) >> artifact
+        1 * mutableMetaData.setArtifacts({
             (it as List) == [artifact]
         })
-        1 * result.setMetaData(metaData)
+        1 * mutableMetaData.asImmutable() >> updatedMetaData
+        1 * result.setMetaData(updatedMetaData)
         0 * _
     }
 
     def "does not replace meta-data when not client module"() {
-        def moduleDependency = Mock(ModuleDependency)
-
         when:
-        resolver.resolve(dependency, id, result)
+        resolver.resolve(id, componentRequestMetaData, result)
 
         then:
-        1 * target.resolve(dependency, id, result)
+        1 * target.resolve(id, componentRequestMetaData, result)
         1 * result.getFailure() >> null
-        1 * dependency.source >> moduleDependency
+        1 * componentRequestMetaData.clientModule >> null
         0 * _
     }
 
     def "does not replace meta-data for broken module version"() {
         when:
-        resolver.resolve(dependency, id, result)
+        resolver.resolve(id, componentRequestMetaData, result)
 
         then:
-        1 * target.resolve(dependency, id, result)
+        1 * target.resolve(id, componentRequestMetaData, result)
         _ * result.failure >> new ModuleVersionResolveException(newSelector("a", "b", "c"), "broken")
         0 * _
     }

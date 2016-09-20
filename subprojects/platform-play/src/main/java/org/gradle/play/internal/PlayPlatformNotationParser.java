@@ -18,11 +18,16 @@ package org.gradle.play.internal;
 
 import org.gradle.api.tasks.Optional;
 import org.gradle.internal.exceptions.DiagnosticsVisitor;
-import org.gradle.internal.typeconversion.*;
+import org.gradle.internal.typeconversion.MapKey;
+import org.gradle.internal.typeconversion.MapNotationConverter;
+import org.gradle.internal.typeconversion.NotationConvertResult;
+import org.gradle.internal.typeconversion.NotationConverter;
+import org.gradle.internal.typeconversion.NotationParser;
+import org.gradle.internal.typeconversion.NotationParserBuilder;
+import org.gradle.internal.typeconversion.TypeConversionException;
 import org.gradle.platform.base.internal.DefaultPlatformRequirement;
 import org.gradle.platform.base.internal.PlatformRequirement;
 
-// TODO:DAZ Unit test
 public class PlayPlatformNotationParser {
 
     private static final NotationParserBuilder<PlatformRequirement> BUILDER = NotationParserBuilder
@@ -42,7 +47,7 @@ public class PlayPlatformNotationParser {
     static class MapConverter extends MapNotationConverter<PlatformRequirement> {
         @Override
         public void describe(DiagnosticsVisitor visitor) {
-            visitor.candidate("Map defining the platform versions").example("[play: '2.3.7', scala:'2.11.4', java: '1.6']");
+            visitor.candidate("Map defining the platform versions").example("[play: '" + DefaultPlayPlatform.DEFAULT_PLAY_VERSION + "', scala:'2.11.8', java: '1.6']");
         }
 
         protected PlatformRequirement parseMap(@MapKey("play") String playVersion,
@@ -55,9 +60,10 @@ public class PlayPlatformNotationParser {
     static class StringConverter implements NotationConverter<String, PlatformRequirement> {
         @Override
         public void describe(DiagnosticsVisitor visitor) {
-            visitor.candidate("The name of a Play platform").example("'play-2.3.7'.");
+            visitor.candidate("The name of a Play platform").example("'play-" + DefaultPlayPlatform.DEFAULT_PLAY_VERSION + "'.");
         }
 
+        @Override
         public void convert(String notation, NotationConvertResult<? super PlatformRequirement> result) throws TypeConversionException {
             result.converted(new DefaultPlatformRequirement(notation));
         }

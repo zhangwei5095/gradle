@@ -18,11 +18,14 @@ package org.gradle.internal.nativeintegration.services
 
 import org.gradle.internal.reflect.JavaMethod
 import org.gradle.internal.reflect.JavaReflectionUtil
+import org.gradle.util.Requires
+import org.gradle.util.TestPrecondition
 import spock.lang.Specification
 
 import java.lang.reflect.Constructor
 
 class NativeServicesInitializationTest extends Specification {
+    @Requires(TestPrecondition.FIX_TO_WORK_ON_JAVA9)
     def "cannot get an instance of NativeServices without initializing first" () {
         // Construct an isolated classloader so we can load a pristine NativeServices class
         // that's guaranteed not to have been initialized before
@@ -35,7 +38,7 @@ class NativeServicesInitializationTest extends Specification {
 
         then:
         def e = thrown(IllegalStateException)
-        e.message.startsWith("Cannot get an instance of NativeServices without first calling initialize().")
+        e.message == "Cannot get an instance of NativeServices without first calling initialize()."
     }
 
     def "no public constructors on NativeServices" () {

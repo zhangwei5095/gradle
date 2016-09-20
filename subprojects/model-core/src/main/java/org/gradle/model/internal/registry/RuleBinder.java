@@ -17,90 +17,121 @@
 package org.gradle.model.internal.registry;
 
 import net.jcip.annotations.NotThreadSafe;
-import org.gradle.model.internal.core.ModelPath;
-import org.gradle.model.internal.core.ModelReference;
+import org.gradle.api.Action;
+import org.gradle.model.internal.core.ModelAction;
 import org.gradle.model.internal.core.rule.describe.ModelRuleDescriptor;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
 @NotThreadSafe
-public abstract class RuleBinder {
+public class RuleBinder {
 
-    private final ModelRuleDescriptor descriptor;
-    private final List<? extends ModelReference<?>> inputReferences;
-    private final ModelPath scope;
+    private final ModelBinding subjectBinding;
+    private final ModelAction action;
+    private final List<BindingPredicate> inputReferences;
     private final Collection<RuleBinder> binders;
 
-    private boolean bindingInputs;
     private int inputsBound;
-    private List<ModelBinding<?>> inputBindings;
+    private final List<ModelBinding> inputBindings;
 
-    public RuleBinder(List<? extends ModelReference<?>> inputReferences, ModelRuleDescriptor descriptor, ModelPath scope, Collection<RuleBinder> binders) {
+    public RuleBinder(BindingPredicate subjectReference, List<BindingPredicate> inputReferences, ModelAction action, Collection<RuleBinder> binders) {
+        this.action = action;
         this.inputReferences = inputReferences;
-        this.descriptor = descriptor;
-        this.scope = scope;
         this.binders = binders;
-        this.inputBindings = inputReferences.isEmpty() ? Collections.<ModelBinding<?>>emptyList() : Arrays.asList(new ModelBinding<?>[inputReferences.size()]); // fix size
+        this.subjectBinding = binding(subjectReference, action.getDescriptor(), true, new Action<ModelBinding>() {
+            @Override
+            public void execute(ModelBinding modelBinding) {
+                ModelNodeInternal node = modelBinding.getNode();
+                BindingPredicate predicate = modelBinding.getPredicate();
+                if (node.isAtLeast(predicate.getState())) {
+                    throw new IllegalStateException(String.format("Cannot add rule %s for model element '%s' at state %s as this element is already at state %s.",
+                        modelBinding.referrer,
+                        node.getPath(),
+                        predicate.getState().previous(),
+                        node.getState()
+                    ));
+                }
+                maybeFire();
+            }
+        });
+        this.inputBindings = inputBindings(inputReferences, action.getDescriptor(), new Action<ModelBinding>() {
+            @Override
+            public void execute(ModelBinding modelBinding) {
+                ModelNodeInternal node = modelBinding.getNode();
+                BindingPredicate reference = modelBinding.getPredicate();
+                if (node.getState().compareTo(reference.getState()) > 0) {
+                    throw new IllegalStateException(String.format("Cannot add rule %s with input model element '%s' at state %s as this element is already at state %s.",
+                        modelBinding.referrer,
+                        node.getPath(),
+                        reference.getState(),
+                        node.getState()
+                    ));
+                }
+                ++inputsBound;
+                maybeFire();
+            }
+        });
         if (!isBound()) {
             binders.add(this);
         }
     }
 
-    // is binding then inputs for this binder in progress?
-    public boolean isBindingInputs() {
-        return bindingInputs;
+    private static List<ModelBinding> inputBindings(List<BindingPredicate> inputReferences, ModelRuleDescriptor descriptor, Action<ModelBinding> inputBindAction) {
+        if (inputReferences.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ModelBinding> bindings = new ArrayList<ModelBinding>(inputReferences.size());
+        for (BindingPredicate inputReference : inputReferences) {
+            bindings.add(binding(inputReference, descriptor, false, inputBindAction));
+        }
+        return bindings;
     }
 
-    public void setBindingInputs(boolean bindingInputs) {
-        this.bindingInputs = bindingInputs;
+    private static ModelBinding binding(BindingPredicate reference, ModelRuleDescriptor descriptor, boolean writable, Action<ModelBinding> bindAction) {
+        if (reference.getPath() != null) {
+            return new PathBinderCreationListener(descriptor, reference, writable, bindAction);
+        }
+        return new OneOfTypeBinderCreationListener(descriptor, reference, writable, bindAction);
     }
 
-    public List<? extends ModelReference<?>> getInputReferences() {
-        return inputReferences;
+    /**
+     * Returns the rule being bound.
+     */
+    public ModelAction getAction() {
+        return action;
     }
 
-    public ModelBinding<?> getSubjectBinding() {
-        return null;
+    /**
+     * Returns the subject binding for the rule.
+     */
+    public ModelBinding getSubjectBinding() {
+        return subjectBinding;
     }
 
-    public ModelReference<?> getSubjectReference() {
-        return null;
-    }
-
-    public List<ModelBinding<?>> getInputBindings() {
+    public List<ModelBinding> getInputBindings() {
         return inputBindings;
     }
 
     public ModelRuleDescriptor getDescriptor() {
-        return descriptor;
+        return action.getDescriptor();
     }
 
-    public ModelPath getScope() {
-        return scope;
-    }
-
-    public void bindInput(int i, ModelNodeInternal modelNode) {
-        assert this.inputBindings.get(i) == null;
-        assert inputsBound < inputBindings.size();
-        this.inputBindings.set(i, bind(inputReferences.get(i), modelNode));
-        ++inputsBound;
-        maybeFire();
-    }
-
-    protected void maybeFire() {
+    private void maybeFire() {
         if (isBound()) {
             binders.remove(this);
         }
     }
 
     public boolean isBound() {
-        return inputsBound == inputReferences.size();
+        return subjectBinding.isBound()
+            && inputsBound == inputReferences.size();
     }
 
-    static <I> ModelBinding<I> bind(ModelReference<I> reference, ModelNodeInternal modelNode) {
-        return ModelBinding.of(reference, modelNode);
+    @Override
+    public String toString() {
+        return String.format("%s[%s - %s]", getClass().getSimpleName(), subjectBinding, action.getDescriptor());
     }
 }

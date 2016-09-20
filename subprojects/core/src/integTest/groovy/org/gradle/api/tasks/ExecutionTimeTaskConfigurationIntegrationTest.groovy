@@ -47,6 +47,8 @@ class ExecutionTimeTaskConfigurationIntegrationTest extends AbstractIntegrationS
 
         when:
         executer.withArgument("--continue")
+        executer.expectDeprecationWarning()
+        executer.expectDeprecationWarning()
         fails("broken", "broken2", "broken4")
 
         then:
@@ -91,6 +93,10 @@ class ExecutionTimeTaskConfigurationIntegrationTest extends AbstractIntegrationS
         "outputs.upToDateWhen({ } as Spec)"                         | "TaskOutputs.upToDateWhen(Spec)"
         "outputs.file('a')"                                         | "TaskOutputs.file(Object)"
         "outputs.files('a')"                                        | "TaskOutputs.files(Object...)"
+        "outputs.namedFiles(['prop':'a'])"                          | "TaskOutputs.namedFiles(Map)"
+        "outputs.namedFiles({ ['prop':'a'] })"                      | "TaskOutputs.namedFiles(Callable)"
+        "outputs.namedDirectories(['prop':'a'])"                    | "TaskOutputs.namedDirectories(Map)"
+        "outputs.namedDirectories({ ['prop':'a'] })"                | "TaskOutputs.namedDirectories(Callable)"
         "outputs.dir('a')"                                          | "TaskOutputs.dir(Object)"
     }
 }

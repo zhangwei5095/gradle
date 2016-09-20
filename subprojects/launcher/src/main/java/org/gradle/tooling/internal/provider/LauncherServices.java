@@ -16,13 +16,19 @@
 
 package org.gradle.tooling.internal.provider;
 
-import org.gradle.cache.CacheRepository;
 import org.gradle.initialization.GradleLauncherFactory;
-import org.gradle.internal.classloader.ClassLoaderFactory;
+import org.gradle.internal.classpath.CachedClasspathTransformer;
+import org.gradle.internal.concurrent.ExecutorFactory;
+import org.gradle.internal.event.ListenerManager;
+import org.gradle.internal.filewatch.FileWatcherFactory;
 import org.gradle.internal.invocation.BuildActionRunner;
+import org.gradle.internal.logging.text.StyledTextOutputFactory;
 import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.scopes.PluginServiceRegistry;
+import org.gradle.launcher.exec.BuildActionExecuter;
+import org.gradle.launcher.exec.BuildActionParameters;
+import org.gradle.launcher.exec.BuildExecuter;
 import org.gradle.launcher.exec.ChainingBuildActionRunner;
 import org.gradle.launcher.exec.InProcessBuildActionExecuter;
 
@@ -33,8 +39,12 @@ public class LauncherServices implements PluginServiceRegistry {
         registration.addProvider(new ToolingGlobalScopeServices());
     }
 
+    public void registerBuildSessionServices(ServiceRegistration registration) {
+        registration.addProvider(new ToolingBuildSessionScopeServices());
+    }
+
     public void registerBuildServices(ServiceRegistration registration) {
-        registration.addProvider(new ToolingBuildScopeServices());
+
     }
 
     public void registerGradleServices(ServiceRegistration registration) {
@@ -44,9 +54,10 @@ public class LauncherServices implements PluginServiceRegistry {
     }
 
     static class ToolingGlobalScopeServices {
-        InProcessBuildActionExecuter createBuildActionExecuter(GradleLauncherFactory gradleLauncherFactory, ServiceRegistry services) {
-            List<BuildActionRunner> buildActionRunners = services.getAll(BuildActionRunner.class);
-            return new InProcessBuildActionExecuter(gradleLauncherFactory, new ChainingBuildActionRunner(buildActionRunners));
+        BuildExecuter createBuildExecuter(GradleLauncherFactory gradleLauncherFactory, ServiceRegistry globalServices, ListenerManager listenerManager, FileWatcherFactory fileWatcherFactory, ExecutorFactory executorFactory, StyledTextOutputFactory styledTextOutputFactory) {
+            List<BuildActionRunner> buildActionRunners = globalServices.getAll(BuildActionRunner.class);
+            BuildActionExecuter<BuildActionParameters> delegate = new InProcessBuildActionExecuter(gradleLauncherFactory, new ChainingBuildActionRunner(buildActionRunners));
+            return new ContinuousBuildActionExecuter(delegate, fileWatcherFactory, listenerManager, styledTextOutputFactory, executorFactory);
         }
 
         ExecuteBuildActionRunner createExecuteBuildActionRunner() {
@@ -56,26 +67,21 @@ public class LauncherServices implements PluginServiceRegistry {
         ClassLoaderCache createClassLoaderCache() {
             return new ClassLoaderCache();
         }
-
-        JarCache createJarCache() {
-            return new JarCache();
-        }
     }
 
-    static class ToolingBuildScopeServices {
-        PayloadClassLoaderFactory createClassLoaderFactory(ClassLoaderFactory classLoaderFactory, JarCache jarCache, CacheRepository cacheRepository) {
+    static class ToolingBuildSessionScopeServices {
+        PayloadClassLoaderFactory createClassLoaderFactory(CachedClasspathTransformer cachedClasspathTransformer) {
             return new DaemonSidePayloadClassLoaderFactory(
-                    new ModelClassLoaderFactory(
-                            classLoaderFactory),
-                    jarCache,
-                    cacheRepository);
+                new ModelClassLoaderFactory(),
+                cachedClasspathTransformer);
         }
 
         PayloadSerializer createPayloadSerializer(ClassLoaderCache classLoaderCache, PayloadClassLoaderFactory classLoaderFactory) {
             return new PayloadSerializer(
+                new WellKnownClassLoaderRegistry(
                     new DefaultPayloadClassLoaderRegistry(
-                            classLoaderCache,
-                            classLoaderFactory)
+                        classLoaderCache,
+                        classLoaderFactory))
             );
         }
     }

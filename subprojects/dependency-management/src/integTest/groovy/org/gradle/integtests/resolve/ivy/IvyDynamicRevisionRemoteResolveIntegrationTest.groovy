@@ -16,7 +16,7 @@
 package org.gradle.integtests.resolve.ivy
 
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.resolve.ResolveTestFixture
+import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import org.gradle.test.fixtures.Repository
 import org.gradle.test.fixtures.encoding.Identifier
 import org.gradle.test.fixtures.server.http.IvyHttpModule
@@ -248,7 +248,7 @@ dependencies {
     staticVersions group: "group", name: "projectA", version: "1.1"
     compile group: "group", name: "projectA", version: "latest.milestone"
 }
-task cache << { configurations.staticVersions.files }
+task cache { doLast { configurations.staticVersions.files } }
 """
 
         and:
@@ -672,7 +672,7 @@ if (project.hasProperty('noDynamicRevisionCache')) {
         }
     }
 
-    public void "resolves dynamic version with 2 repositories where first repo results in 404 for directory listing"() {
+    def "resolves dynamic version with 2 repositories where first repo results in 404 for directory listing"() {
         given:
         def repo1 = ivyHttpRepo("repo1")
         def repo2 = ivyHttpRepo("repo2")

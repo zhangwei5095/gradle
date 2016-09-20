@@ -16,33 +16,52 @@
 
 package org.gradle.plugins.ide.idea.model.internal
 
-import org.gradle.util.TestUtil
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry
+import org.gradle.api.internal.composite.CompositeBuildContext
+import org.gradle.api.internal.composite.CompositeBuildIdeProjectResolver
+import org.gradle.internal.component.local.model.LocalComponentArtifactMetadata
+import org.gradle.internal.component.model.DefaultIvyArtifactName
+import org.gradle.internal.service.DefaultServiceRegistry
+import org.gradle.plugins.ide.internal.resolver.model.IdeProjectDependency
 import spock.lang.Specification
+
+import static org.gradle.internal.component.local.model.TestComponentIdentifiers.newProjectId
 
 class ModuleDependencyBuilderTest extends Specification {
 
-    def project = TestUtil.createRootProject()
-    def builder = new ModuleDependencyBuilder()
+    def projectId = newProjectId("project-path")
+    def ideDependency = new IdeProjectDependency(projectId, "test")
+    def localComponentRegistry = Mock(LocalComponentRegistry)
+    def serviceRegistry = new DefaultServiceRegistry().add(LocalComponentRegistry, localComponentRegistry)
+                                                      .add(CompositeBuildContext, Stub(CompositeBuildContext))
+    def builder = new ModuleDependencyBuilder(new CompositeBuildIdeProjectResolver(serviceRegistry))
 
     def "builds dependency for nonIdea project"() {
         when:
-        def dependency = builder.create(project, 'compile')
+        def dependency = builder.create(ideDependency, 'compile')
 
         then:
         dependency.scope == 'compile'
-        dependency.name == project.name
+        dependency.name == "test"
+
+        and:
+        localComponentRegistry.getAdditionalArtifacts(_) >> []
     }
 
     def "builds dependency for project"() {
         given:
-        project.apply(plugin: 'idea')
-        project.idea.module.name = 'foo'
+        def imlArtifact = Stub(LocalComponentArtifactMetadata) {
+            getName() >> new DefaultIvyArtifactName("foo", "iml", "iml", null)
+        }
 
         when:
-        def dependency = builder.create(project, 'compile')
+        def dependency = builder.create(ideDependency, 'compile')
 
         then:
         dependency.scope == 'compile'
         dependency.name == 'foo'
+
+        and:
+        localComponentRegistry.getAdditionalArtifacts(_) >> [imlArtifact]
     }
 }

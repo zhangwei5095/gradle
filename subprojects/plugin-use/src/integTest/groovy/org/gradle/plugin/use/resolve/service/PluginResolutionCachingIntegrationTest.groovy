@@ -19,10 +19,12 @@ package org.gradle.plugin.use.resolve.service
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.plugin.PluginBuilder
 import org.gradle.test.fixtures.server.http.MavenHttpModule
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.junit.Rule
 
 import static org.hamcrest.Matchers.startsWith
 
+@LeaksFileHandles
 class PluginResolutionCachingIntegrationTest extends AbstractIntegrationSpec {
 
     public static final String PLUGIN_ID = "org.my.myplugin"
@@ -42,8 +44,10 @@ class PluginResolutionCachingIntegrationTest extends AbstractIntegrationSpec {
         service.start()
         buildScript """
             plugins { id '$PLUGIN_ID' version '$VERSION' }
-            task pluginApplied << {
-                assert project.pluginApplied
+            task pluginApplied {
+                doLast {
+                    assert project.pluginApplied
+                }
             }
         """
     }

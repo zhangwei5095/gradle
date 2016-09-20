@@ -27,7 +27,6 @@ import org.gradle.scala.internal.reflect.ScalaOptionInvocationWrapper;
 import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Twirl compiler uses reflection to load and invoke the actual compiler classes/methods.
@@ -41,6 +40,7 @@ public class TwirlCompiler implements Compiler<TwirlCompileSpec>, Serializable {
         this.adapter = adapter;
     }
 
+    @Override
     public WorkResult execute(TwirlCompileSpec spec) {
         ArrayList<File> outputFiles = Lists.newArrayList();
         try {
@@ -48,7 +48,7 @@ public class TwirlCompiler implements Compiler<TwirlCompileSpec>, Serializable {
             ScalaMethod compile = adapter.getCompileMethod(cl);
             Iterable<RelativeFile> sources = spec.getSources();
             for (RelativeFile sourceFile : sources) {
-                Object result = compile.invoke(adapter.createCompileParameters(cl, sourceFile.getFile(), sourceFile.getBaseDir(), spec.getDestinationDir(), spec.isJavaProject()));
+                Object result = compile.invoke(adapter.createCompileParameters(cl, sourceFile.getFile(), sourceFile.getBaseDir(), spec.getDestinationDir(), spec.getDefaultImports()));
                 ScalaOptionInvocationWrapper<File> maybeFile = new ScalaOptionInvocationWrapper<File>(result);
                 if (maybeFile.isDefined()) {
                     outputFiles.add(maybeFile.get());
@@ -65,7 +65,7 @@ public class TwirlCompiler implements Compiler<TwirlCompileSpec>, Serializable {
         return adapter.getDependencyNotation();
     }
 
-    public List<String> getClassLoaderPackages() {
+    public Iterable<String> getClassLoaderPackages() {
         return adapter.getClassLoaderPackages();
     }
 }

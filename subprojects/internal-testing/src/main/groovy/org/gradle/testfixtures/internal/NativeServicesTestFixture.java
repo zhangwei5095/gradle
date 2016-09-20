@@ -16,7 +16,6 @@
 
 package org.gradle.testfixtures.internal;
 
-import org.gradle.internal.FileUtils;
 import org.gradle.internal.nativeintegration.services.NativeServices;
 
 import java.io.File;
@@ -25,24 +24,23 @@ public class NativeServicesTestFixture {
     static NativeServices nativeServices;
     static boolean initialized;
 
-    public static void initialize(File gradleUserHomeDir) {
+    public static synchronized void initialize() {
         if (!initialized) {
-            NativeServices.initialize(gradleUserHomeDir);
-        }
-    }
-
-    public static void initialize() {
-        if (!initialized) {
-            File nativeDir = FileUtils.createTempDir("native");
+            File nativeDir = getNativeServicesDir();
             NativeServices.initialize(nativeDir);
+            initialized = true;
         }
     }
 
-    public static NativeServices getInstance() {
+    public static synchronized NativeServices getInstance() {
         if (nativeServices == null) {
             initialize();
             nativeServices = NativeServices.getInstance();
         }
         return nativeServices;
+    }
+
+    public static File getNativeServicesDir() {
+        return new File("build/native-libs");
     }
 }

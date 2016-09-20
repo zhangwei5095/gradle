@@ -40,6 +40,11 @@ task determineCommitId {
 
         def env = System.getenv()
 
+        // For promotion builds use the commitId passed in as a project property
+        strategies << {
+            project.hasProperty('promotionCommitId') ? project.property('promotionCommitId') : null
+        }
+
         // Builds of Gradle happening on the CI server
         strategies << {
             env["BUILD_VCS_NUMBER"]
@@ -57,7 +62,7 @@ task determineCommitId {
 
         // If it's a checkout, ask Git for it
         strategies << {
-            if (file(".git/HEAD").exists()) {
+            if (file(".git").exists()) {
                 def baos = new ByteArrayOutputStream()
                 def execResult = exec {
                     ignoreExitValue = true
@@ -70,7 +75,7 @@ task determineCommitId {
                 }
                 if (execResult.exitValue == 0) {
                     new String(baos.toByteArray(), "utf8").trim()
-                } else {
+                } else if (file(".git/HEAD").exists()) {
                     // Read commit id directly from filesystem
                     def headRef = file(".git/HEAD").text
                     headRef = headRef.replaceAll('ref: ', '').trim()
@@ -102,46 +107,22 @@ task determineCommitId {
 
 task createBuildReceipt(dependsOn: determineCommitId) {
     ext.receiptFile = file("$buildDir/$buildReceiptFileName")
+    inputs.property "version", { version }
+    inputs.property "versionBase", { versionBase }
+    inputs.property "isSnapshot", { isSnapshot }
+    inputs.property "buildTimestamp", { buildTimestamp }
+    inputs.property "commitId", { devBuild ? "HEAD" : determineCommitId.commitId }
     outputs.file receiptFile
-    outputs.upToDateWhen { false }
+    outputs.cacheIf { true }
     doLast {
-        def hostName
-        try {
-            hostName = InetAddress.localHost.hostName
-        } catch (UnknownHostException e) {
-            def baos = new ByteArrayOutputStream()
-            def execResult = exec {
-                ignoreExitValue = true
-                commandLine = ["hostname"]
-                standardOutput = baos
-            }
-            if (execResult.exitValue == 0) {
-                hostName = new String(baos.toByteArray(), "utf8").trim()
-            } else {
-                hostName = "unknown"
-            }
-        }
         def data = [
-                commitId: determineCommitId.commitId,
+                commitId: devBuild ? "HEAD" : determineCommitId.commitId,
                 versionNumber: version,
                 versionBase: versionBase,
                 isSnapshot: isSnapshot,
-                rcNumber: rcNumber == null ? "" : rcNumber,
                 buildTimestamp: buildTimestamp,
-                buildNumber: System.properties["build.number"] ?: 'none',
-                username: System.properties["user.name"],
-                hostname: hostName,
-                javaVersion: System.properties["java.version"],
-                osName: System.properties["os.name"],
-                osVersion: System.properties["os.version"],
-                project: 'gradle'
         ]
 
-        receiptFile.parentFile.mkdirs()
-
-        // We write this out ourself instead of using the properties class to avoid the
-        // annoying timestamp that insists on placing in there, that throws out incremental.
-        def content = data.entrySet().collect { "$it.key=$it.value" }.sort().join("\n")
-        receiptFile.setText(content, "ISO-8859-1")
+        org.gradle.build.ReproduciblePropertiesWriter.store(data, receiptFile)
     }
 }

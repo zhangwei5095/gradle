@@ -19,22 +19,23 @@ ext {
     libraries = [:]
 }
 
-versions.commons_io = 'commons-io:commons-io:1.4'
+versions.commons_io = 'commons-io:commons-io:2.2'
 
-versions.groovy = "2.3.10"
+versions.groovy = "2.4.7"
 
 versions.bouncycastle = "1.51"
 
-libraries.ant = dependencies.module('org.apache.ant:ant:1.9.4') {
-    dependency 'org.apache.ant:ant-launcher:1.9.4@jar'
+libraries.ant = dependencies.module('org.apache.ant:ant:1.9.6') {
+    dependency 'org.apache.ant:ant-launcher:1.9.6@jar'
 }
 
-libraries.asm =  'org.ow2.asm:asm-all:5.0.3'
+libraries.asm =  'org.ow2.asm:asm-all:5.1'
+libraries.bndlib = dependencies.module('biz.aQute.bnd:biz.aQute.bndlib:3.2.0')
 libraries.commons_cli = 'commons-cli:commons-cli:1.2@jar'
 libraries.commons_io = dependencies.module(versions.commons_io)
 libraries.commons_lang = 'commons-lang:commons-lang:2.6@jar'
-libraries.commons_collections = 'commons-collections:commons-collections:3.2.1@jar'
-libraries.jsch = "com.jcraft:jsch:0.1.51"
+libraries.commons_collections = 'commons-collections:commons-collections:3.2.2@jar'
+libraries.jsch = "com.jcraft:jsch:0.1.53"
 libraries.ivy = dependencies.module('org.apache.ivy:ivy:2.2.0'){
     dependency libraries.jsch
 }
@@ -69,29 +70,16 @@ libraries.jetty = dependencies.module("org.mortbay.jetty:jetty:6.1.25") {
     dependency libraries.servlet_api
 }
 
-libraries.commons_httpclient = dependencies.module('org.apache.httpcomponents:httpclient:4.2.2') {
-    dependency "org.apache.httpcomponents:httpcore:4.2.2@jar"
+libraries.commons_codec = "commons-codec:commons-codec:1.6@jar"
+libraries.jcifs = "org.samba.jcifs:jcifs:1.3.17@jar"
+libraries.commons_httpclient = dependencies.module('org.apache.httpcomponents:httpclient:4.4.1') {
+    dependency "org.apache.httpcomponents:httpcore:4.4.4@jar"
     dependency libraries.jcl_to_slf4j
-    dependency "commons-codec:commons-codec:1.6@jar"
-    dependency "org.samba.jcifs:jcifs:1.3.17@jar"
+    dependency libraries.commons_codec
+    dependency libraries.jcifs
 }
 
-libraries.maven_publish = [
-    'classworlds:classworlds:1.1-alpha-2@jar',
-    'org.codehaus.plexus:plexus-container-default:1.0-alpha-9-stable-1@jar',
-    'org.codehaus.plexus:plexus-utils:1.5.15@jar',
-    'org.codehaus.plexus:plexus-interpolation:1.11@jar',
-    'org.apache.maven:maven-artifact:2.2.1@jar',
-    'org.apache.maven:maven-artifact-manager:2.2.1@jar',
-    'org.apache.maven:maven-repository-metadata:2.2.1@jar',
-    'org.apache.maven:maven-model:2.2.1@jar',
-    'org.apache.maven:maven-project:2.2.1@jar',
-    'org.apache.maven:maven-error-diagnostics:2.2.1@jar',
-    'org.apache.maven:maven-settings:2.2.1@jar',
-    'org.apache.maven.wagon:wagon-file:1.0-beta-6@jar',
-    'org.apache.maven.wagon:wagon-http-lightweight:1.0-beta-6@jar',
-    'org.apache.maven.wagon:wagon-provider-api:1.0-beta-6@jar',
-]
+
 libraries += [
         dom4j: 'dom4j:dom4j:1.6.1@jar',
         guava: 'com.google.guava:guava-jdk5:17.0@jar',
@@ -99,12 +87,11 @@ libraries += [
         groovy: "org.codehaus.groovy:groovy-all:${versions.groovy}",
         jaxen: 'jaxen:jaxen:1.1@jar',
         jcip: "net.jcip:jcip-annotations:1.0@jar",
-        jna: 'net.java.dev.jna:jna:3.2.7@jar',
         junit: 'junit:junit:4.12@jar',
         xmlunit: 'xmlunit:xmlunit:1.3',
         nekohtml: 'net.sourceforge.nekohtml:nekohtml:1.9.14',
         xbean: 'org.apache.xbean:xbean-reflect:3.4@jar', //required by maven3 classes
-        nativePlatform: 'net.rubygrapefruit:native-platform:0.10',
+        nativePlatform: 'net.rubygrapefruit:native-platform:0.11',
         xerces: "xerces:xercesImpl:2.9.1",
         objenesis: 'org.objenesis:objenesis:1.2@jar',
         jsoup:'org.jsoup:jsoup:1.6.3'
@@ -127,16 +114,17 @@ libraries.maven3 = dependencies.module("org.apache.maven:maven-core:3.0.4") {
 
     //core:
     dependency "org.apache.maven:maven-core:3.0.4@jar"
+    dependency "org.apache.maven:maven-compat:3.0.4@jar"
     dependency "org.apache.maven:maven-model-builder:3.0.4@jar"
     dependency "org.apache.maven:maven-model:3.0.4@jar"
 
     //somewhat core:
     dependency "org.apache.maven:maven-artifact:3.0.4@jar"
-    dependency "org.apache.maven:maven-compat:3.0.4@jar"
     dependency "org.apache.maven:maven-repository-metadata:3.0.4@jar"
     dependency "org.apache.maven:maven-plugin-api:3.0.4@jar"
     dependency "org.apache.maven:maven-aether-provider:3.0.4@jar"
 
+    dependency 'org.apache.maven.wagon:wagon-file:2.4@jar'
     dependency 'org.apache.maven.wagon:wagon-http:2.4@jar'
     dependency 'org.apache.maven.wagon:wagon-provider-api:2.4@jar'
     dependency 'org.apache.maven.wagon:wagon-http-shared4:2.4@jar'
@@ -150,7 +138,7 @@ libraries.maven3 = dependencies.module("org.apache.maven:maven-core:3.0.4") {
 }
 
 libraries.spock = [
-    'org.spockframework:spock-core:0.7-groovy-2.0@jar',
+    'org.spockframework:spock-core:1.0-groovy-2.4@jar',
     libraries.groovy,
     libraries.objenesis,
     'cglib:cglib-nodep:2.2.2'
@@ -164,7 +152,7 @@ libraries.jmock = [
     libraries.objenesis,
     'cglib:cglib-nodep:2.2'
 ]
-libraries.gson = "com.google.code.gson:gson:2.2.4"
+libraries.gson = "com.google.code.gson:gson:2.7"
 libraries.sshd = dependencies.module("org.apache.sshd:sshd-core:0.13.0") {
     dependency libraries.slf4j_api
     dependency "org.apache.mina:mina-core:2.0.8"
@@ -175,15 +163,17 @@ libraries.bouncycastle_pgp = dependencies.module("org.bouncycastle:bcpg-jdk15on:
     dependency libraries.bouncycastle_provider
 }
 
-libraries.joda = 'joda-time:joda-time:2.7@jar'
+libraries.joda = 'joda-time:joda-time:2.8.2@jar'
 
+versions.aws = "1.11.6"
+versions.jackson = "2.6.6"
 libraries.awsS3 = [
-        'com.amazonaws:aws-java-sdk-s3:1.9.19@jar',
-        'com.amazonaws:aws-java-sdk-kms:1.9.19@jar',
-        'com.amazonaws:aws-java-sdk-core:1.9.19@jar',
-        'com.fasterxml.jackson.core:jackson-core:2.3.2@jar',
-        'com.fasterxml.jackson.core:jackson-annotations:2.3.2@jar',
-        'com.fasterxml.jackson.core:jackson-databind:2.3.2@jar'
+        "com.amazonaws:aws-java-sdk-s3:${versions.aws}@jar",
+        "com.amazonaws:aws-java-sdk-kms:${versions.aws}@jar",
+        "com.amazonaws:aws-java-sdk-core:${versions.aws}@jar",
+        "com.fasterxml.jackson.core:jackson-core:${versions.jackson}@jar",
+        "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}@jar",
+        "com.fasterxml.jackson.core:jackson-databind:${versions.jackson}@jar"
 ] + libraries.commons_httpclient + libraries.joda
 
 allprojects {

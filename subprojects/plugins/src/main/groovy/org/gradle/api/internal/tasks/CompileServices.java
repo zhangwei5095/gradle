@@ -16,8 +16,7 @@
 
 package org.gradle.api.internal.tasks;
 
-import org.gradle.StartParameter;
-import org.gradle.api.internal.jvm.ClassDirectoryBinaryRenderer;
+import org.gradle.api.internal.jvm.JvmBinaryRenderer;
 import org.gradle.api.internal.tasks.compile.daemon.InProcessCompilerDaemonFactory;
 import org.gradle.api.internal.tasks.compile.incremental.analyzer.ClassAnalysisCache;
 import org.gradle.api.internal.tasks.compile.incremental.analyzer.DefaultClassAnalysisCache;
@@ -25,6 +24,7 @@ import org.gradle.api.internal.tasks.compile.incremental.cache.DefaultGeneralCom
 import org.gradle.api.internal.tasks.compile.incremental.cache.GeneralCompileCaches;
 import org.gradle.api.internal.tasks.compile.incremental.jar.DefaultJarSnapshotCache;
 import org.gradle.api.internal.tasks.compile.incremental.jar.JarSnapshotCache;
+import org.gradle.api.invocation.Gradle;
 import org.gradle.cache.CacheRepository;
 import org.gradle.initialization.JdkToolsInitializer;
 import org.gradle.internal.classloader.ClassLoaderFactory;
@@ -33,14 +33,17 @@ import org.gradle.internal.service.scopes.PluginServiceRegistry;
 
 public class CompileServices implements PluginServiceRegistry {
     public void registerGlobalServices(ServiceRegistration registration) {
-        registration.add(ClassDirectoryBinaryRenderer.class);
+        registration.add(JvmBinaryRenderer.class);
+    }
+
+    public void registerBuildSessionServices(ServiceRegistration registration) {
     }
 
     public void registerBuildServices(ServiceRegistration registration) {
-        registration.addProvider(new BuildScopeCompileServices());
     }
 
     public void registerGradleServices(ServiceRegistration registration) {
+        registration.addProvider(new BuildScopeCompileServices());
     }
 
     public void registerProjectServices(ServiceRegistration registration) {
@@ -52,8 +55,8 @@ public class CompileServices implements PluginServiceRegistry {
             initializer.initializeJdkTools();
         }
 
-        InProcessCompilerDaemonFactory createInProcessCompilerDaemonFactory(ClassLoaderFactory classLoaderFactory, StartParameter startParameter) {
-            return new InProcessCompilerDaemonFactory(classLoaderFactory, startParameter.getGradleUserHomeDir());
+        InProcessCompilerDaemonFactory createInProcessCompilerDaemonFactory(ClassLoaderFactory classLoaderFactory, Gradle gradle) {
+            return new InProcessCompilerDaemonFactory(classLoaderFactory, gradle.getGradleUserHomeDir());
         }
 
         GeneralCompileCaches createGeneralCompileCaches(ClassAnalysisCache classAnalysisCache, JarSnapshotCache jarSnapshotCache) {

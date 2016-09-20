@@ -19,89 +19,53 @@ import org.gradle.integtests.tooling.fixture.TargetGradleVersion
 import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
 import org.gradle.integtests.tooling.fixture.ToolingApiVersion
 import org.gradle.test.fixtures.file.TestFile
-import org.gradle.tooling.*
+import org.gradle.tooling.GradleConnectionException
+import org.gradle.tooling.ProjectConnection
+import org.gradle.tooling.events.ProgressEvent
+import org.gradle.tooling.events.test.*
 import org.gradle.tooling.model.gradle.BuildInvocations
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
+@ToolingApiVersion("=2.4")
+@TargetGradleVersion(">=2.4")
 class TestProgressCrossVersionSpec extends ToolingApiSpecification {
-
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "receive test progress events when requesting a model"() {
         given:
-        buildFile << """
-            apply plugin: 'java'
-            repositories { mavenCentral() }
-            dependencies { testCompile 'junit:junit:4.12' }
-            compileTestJava.options.fork = true  // forked as 'Gradle Test Executor 1'
-        """
-
-        file("src/test/java/example/MyTest.java") << """
-            package example;
-            public class MyTest {
-                @org.junit.Test public void foo() throws Exception {
-                     org.junit.Assert.assertEquals(1, 1);
-                }
-            }
-        """
+        goodCode()
 
         when: "asking for a model and specifying some test task(s) to run first"
-        Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
+        List<TestProgressEvent> result = new ArrayList<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.model(BuildInvocations.class).forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        result.add(event)
-                    }
-                }).get()
+                connection.model(BuildInvocations.class).forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.get()
         }
 
         then: "test progress events must be forwarded to the attached listeners"
         result.size() > 0
     }
 
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "receive test progress events when launching a build"() {
         given:
-        buildFile << """
-            apply plugin: 'java'
-            repositories { mavenCentral() }
-            dependencies { testCompile 'junit:junit:4.12' }
-            compileTestJava.options.fork = true  // forked as 'Gradle Test Executor 1'
-        """
-
-        file("src/test/java/example/MyTest.java") << """
-            package example;
-            public class MyTest {
-                @org.junit.Test public void foo() throws Exception {
-                     org.junit.Assert.assertEquals(1, 1);
-                }
-            }
-        """
+        goodCode()
 
         when: "launching a build"
-        Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
+        List<TestProgressEvent> result = new ArrayList<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        result.add(event)
-                    }
-                }).run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.run()
         }
 
         then: "test progress events must be forwarded to the attached listeners"
         result.size() > 0
     }
 
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "receive test progress events for successful test run"() {
         given:
         buildFile << """
@@ -122,66 +86,104 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
         """
 
         when:
-        Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
+        List<TestProgressEvent> result = new ArrayList<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        assert event != null
-                        result.add(event)
-                    }
-                }).run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.run()
         }
 
         then:
         result.size() % 2 == 0          // same number of start events as finish events
         result.size() == 8              // root suite, test process suite, test class suite, test method (each with a start and finish event)
+        result.each {
+            assert it.displayName == it.toString()
+            assert it.descriptor.displayName == it.descriptor.toString()
+        }
 
         def rootStartedEvent = result[0]
-        rootStartedEvent instanceof TestSuiteStartedEvent &&
-                rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
-                rootStartedEvent.descriptor.className == null &&
-                rootStartedEvent.descriptor.parent == null
+        rootStartedEvent instanceof TestStartEvent &&
+            rootStartedEvent.eventTime > 0 &&
+            rootStartedEvent.displayName == "Gradle Test Run :test started" &&
+            rootStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.displayName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.suiteName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.className == null &&
+            rootStartedEvent.descriptor.methodName == null &&
+            rootStartedEvent.descriptor.parent == null
         def testProcessStartedEvent = result[1]
-        testProcessStartedEvent instanceof TestSuiteStartedEvent &&
-                testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
-                testProcessStartedEvent.descriptor.className == null &&
-                testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
+        testProcessStartedEvent instanceof TestStartEvent &&
+            testProcessStartedEvent.eventTime > 0 &&
+            testProcessStartedEvent.displayName == "Gradle Test Executor 2 started" &&
+            testProcessStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.displayName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.suiteName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.className == null &&
+            testProcessStartedEvent.descriptor.methodName == null &&
+            testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
         def testClassStartedEvent = result[2]
-        testClassStartedEvent instanceof TestSuiteStartedEvent &&
-                testClassStartedEvent.descriptor.name == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.className == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
+        testClassStartedEvent instanceof TestStartEvent &&
+            testClassStartedEvent.eventTime > 0 &&
+            testClassStartedEvent.displayName == "Test class example.MyTest started" &&
+            testClassStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testClassStartedEvent.descriptor.name == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.displayName == 'Test class example.MyTest' &&
+            testClassStartedEvent.descriptor.suiteName == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.className == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.methodName == null &&
+            testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
         def testStartedEvent = result[3]
-        testStartedEvent instanceof TestStartedEvent &&
-                testStartedEvent.descriptor.name == 'foo' &&
-                testStartedEvent.descriptor.className == 'example.MyTest' &&
-                testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
+        testStartedEvent instanceof TestStartEvent &&
+            testStartedEvent.eventTime > 0 &&
+            testStartedEvent.displayName == "Test foo(example.MyTest) started" &&
+            testStartedEvent.descriptor.jvmTestKind == JvmTestKind.ATOMIC &&
+            testStartedEvent.descriptor.name == 'foo' &&
+            testStartedEvent.descriptor.displayName == 'Test foo(example.MyTest)' &&
+            testStartedEvent.descriptor.suiteName == null &&
+            testStartedEvent.descriptor.className == 'example.MyTest' &&
+            testStartedEvent.descriptor.methodName == 'foo' &&
+            testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
         def testSucceededEvent = result[4]
-        testSucceededEvent instanceof TestSucceededEvent &&
-                testSucceededEvent.descriptor == testStartedEvent.descriptor &&
-                ((TestSucceededEvent) testSucceededEvent).result.startTime > 0 &&
-                ((TestSucceededEvent) testSucceededEvent).result.endTime > ((TestSucceededEvent) testSucceededEvent).result.startTime
+        testSucceededEvent instanceof TestFinishEvent &&
+            testSucceededEvent.eventTime >= testSucceededEvent.result.endTime &&
+            testSucceededEvent.displayName == "Test foo(example.MyTest) succeeded" &&
+            testSucceededEvent.descriptor == testStartedEvent.descriptor &&
+            testSucceededEvent.result instanceof TestSuccessResult &&
+            testSucceededEvent.result.startTime == testStartedEvent.eventTime &&
+            testSucceededEvent.result.endTime > testSucceededEvent.result.startTime &&
+            testSucceededEvent.result.endTime == testSucceededEvent.eventTime
         def testClassSucceededEvent = result[5]
-        testClassSucceededEvent instanceof TestSuiteSucceededEvent &&
-                testClassSucceededEvent.descriptor == testClassStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) testClassSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) testClassSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) testClassSucceededEvent).result.startTime
+        testClassSucceededEvent instanceof TestFinishEvent &&
+            testClassSucceededEvent.eventTime >= testClassSucceededEvent.result.endTime &&
+            testClassSucceededEvent.displayName == "Test class example.MyTest succeeded" &&
+            testClassSucceededEvent.descriptor == testClassStartedEvent.descriptor &&
+            testClassSucceededEvent.result instanceof TestSuccessResult &&
+            testClassSucceededEvent.result.startTime == testClassStartedEvent.eventTime &&
+            testClassSucceededEvent.result.endTime > testClassSucceededEvent.result.startTime &&
+            testClassSucceededEvent.result.endTime == testClassSucceededEvent.eventTime
         def testProcessSucceededEvent = result[6]
-        testProcessSucceededEvent instanceof TestSuiteSucceededEvent &&
-                testProcessSucceededEvent.descriptor == testProcessStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.startTime
+        testProcessSucceededEvent instanceof TestFinishEvent &&
+            testProcessSucceededEvent.eventTime >= testProcessSucceededEvent.result.endTime &&
+            testProcessSucceededEvent.displayName == "Gradle Test Executor 2 succeeded" &&
+            testProcessSucceededEvent.descriptor == testProcessStartedEvent.descriptor &&
+            testProcessSucceededEvent.result instanceof TestSuccessResult &&
+            testProcessSucceededEvent.result.startTime == testProcessStartedEvent.eventTime &&
+            testProcessSucceededEvent.result.endTime > testProcessSucceededEvent.result.startTime &&
+            testProcessSucceededEvent.result.endTime == testProcessSucceededEvent.eventTime
         def rootSucceededEvent = result[7]
-        rootSucceededEvent instanceof TestSuiteSucceededEvent &&
-                rootSucceededEvent.descriptor == rootStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) rootSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) rootSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) rootSucceededEvent).result.startTime
+        rootSucceededEvent instanceof TestFinishEvent &&
+            rootSucceededEvent.eventTime >= rootSucceededEvent.result.endTime &&
+            rootSucceededEvent.displayName == "Gradle Test Run :test succeeded" &&
+            rootSucceededEvent.descriptor == rootStartedEvent.descriptor &&
+            rootSucceededEvent.result instanceof TestSuccessResult &&
+            rootSucceededEvent.result.startTime == rootStartedEvent.eventTime &&
+            rootSucceededEvent.result.endTime > rootSucceededEvent.result.startTime &&
+            rootSucceededEvent.result.endTime == rootSucceededEvent.eventTime
     }
 
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "receive test progress events for failed test run"() {
         given:
         buildFile << """
@@ -197,76 +199,116 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
             public class MyTest {
                 @org.junit.Test public void foo() throws Exception {
                      Thread.sleep(100);  // sleep for a moment to ensure test duration is > 0 (due to limited clock resolution)
-                     org.junit.Assert.assertEquals(1, 2);
+                     throw new RuntimeException("broken", new RuntimeException("nope"));
                 }
             }
         """
 
         when:
-        Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
+        List<TestProgressEvent> result = new ArrayList<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        assert event != null
-                        result.add(event)
-                    }
-                }).run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.run()
         }
 
         then:
         result.size() % 2 == 0          // same number of start events as finish events
         result.size() == 8              // root suite, test process suite, test class suite, test method (each with a start and finish event)
+        result.each {
+            assert it.displayName == it.toString()
+            assert it.descriptor.displayName == it.descriptor.toString()
+        }
 
         def rootStartedEvent = result[0]
-        rootStartedEvent instanceof TestSuiteStartedEvent &&
-                rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
-                rootStartedEvent.descriptor.className == null &&
-                rootStartedEvent.descriptor.parent == null
+        rootStartedEvent instanceof TestStartEvent &&
+            rootStartedEvent.eventTime > 0 &&
+            rootStartedEvent.displayName == "Gradle Test Run :test started" &&
+            rootStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.displayName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.suiteName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.className == null &&
+            rootStartedEvent.descriptor.methodName == null &&
+            rootStartedEvent.descriptor.parent == null
         def testProcessStartedEvent = result[1]
-        testProcessStartedEvent instanceof TestSuiteStartedEvent &&
-                testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
-                testProcessStartedEvent.descriptor.className == null &&
-                testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
+        testProcessStartedEvent instanceof TestStartEvent &&
+            testProcessStartedEvent.eventTime > 0 &&
+            testProcessStartedEvent.displayName == "Gradle Test Executor 2 started" &&
+            testProcessStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.displayName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.suiteName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.className == null &&
+            testProcessStartedEvent.descriptor.methodName == null &&
+            testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
         def testClassStartedEvent = result[2]
-        testClassStartedEvent instanceof TestSuiteStartedEvent &&
-                testClassStartedEvent.descriptor.name == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.className == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
+        testClassStartedEvent instanceof TestStartEvent &&
+            testClassStartedEvent.eventTime > 0 &&
+            testClassStartedEvent.displayName == "Test class example.MyTest started" &&
+            testClassStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testClassStartedEvent.descriptor.name == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.displayName == 'Test class example.MyTest' &&
+            testClassStartedEvent.descriptor.suiteName == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.className == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.methodName == null &&
+            testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
         def testStartedEvent = result[3]
-        testStartedEvent instanceof TestStartedEvent &&
-                testStartedEvent.descriptor.name == 'foo' &&
-                testStartedEvent.descriptor.className == 'example.MyTest' &&
-                testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
+        testStartedEvent instanceof TestStartEvent &&
+            testStartedEvent.eventTime > 0 &&
+            testStartedEvent.displayName == "Test foo(example.MyTest) started" &&
+            testStartedEvent.descriptor.jvmTestKind == JvmTestKind.ATOMIC &&
+            testStartedEvent.descriptor.name == 'foo' &&
+            testStartedEvent.descriptor.displayName == 'Test foo(example.MyTest)' &&
+            testStartedEvent.descriptor.suiteName == null &&
+            testStartedEvent.descriptor.className == 'example.MyTest' &&
+            testStartedEvent.descriptor.methodName == 'foo' &&
+            testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
         def testFailedEvent = result[4]
-        testFailedEvent instanceof TestFailedEvent &&
-                testFailedEvent.descriptor == testStartedEvent.descriptor &&
-                ((TestFailedEvent) testFailedEvent).result.startTime > 0 &&
-                ((TestFailedEvent) testFailedEvent).result.endTime > ((TestFailedEvent) testFailedEvent).result.startTime &&
-                ((TestFailedEvent) testFailedEvent).result.exceptions.findAll { it.class == AssertionError }.size() == 1
+        testFailedEvent instanceof TestFinishEvent &&
+            testFailedEvent.eventTime >= testFailedEvent.result.endTime &&
+            testFailedEvent.displayName == "Test foo(example.MyTest) failed" &&
+            testFailedEvent.descriptor == testStartedEvent.descriptor &&
+            testFailedEvent.result instanceof TestFailureResult &&
+            testFailedEvent.result.startTime == testStartedEvent.eventTime &&
+            testFailedEvent.result.endTime == testFailedEvent.eventTime &&
+            testFailedEvent.result.failures.size() == 1 &&
+            testFailedEvent.result.failures[0].message == 'broken' &&
+            testFailedEvent.result.failures[0].description.startsWith("java.lang.RuntimeException: broken") &&
+            testFailedEvent.result.failures[0].description.contains("at example.MyTest.foo(MyTest.java:6)") &&
+            testFailedEvent.result.failures[0].causes.size() == 1 &&
+            testFailedEvent.result.failures[0].causes[0].message == 'nope' &&
+            testFailedEvent.result.failures[0].causes[0].causes.empty
         def testClassFailedEvent = result[5]
-        testClassFailedEvent instanceof TestSuiteFailedEvent &&
-                testClassFailedEvent.descriptor == testClassStartedEvent.descriptor &&
-                ((TestSuiteFailedEvent) testClassFailedEvent).result.startTime > 0 &&
-                ((TestSuiteFailedEvent) testClassFailedEvent).result.endTime > ((TestSuiteFailedEvent) testClassFailedEvent).result.startTime &&
-                ((TestSuiteFailedEvent) testClassFailedEvent).result.exceptions.size() == 0
+        testClassFailedEvent instanceof TestFinishEvent &&
+            testClassFailedEvent.eventTime >= testClassFailedEvent.result.endTime &&
+            testClassFailedEvent.displayName == "Test class example.MyTest failed" &&
+            testClassFailedEvent.descriptor == testClassStartedEvent.descriptor &&
+            testClassFailedEvent.result instanceof TestFailureResult &&
+            testClassFailedEvent.result.startTime == testClassStartedEvent.eventTime &&
+            testClassFailedEvent.result.endTime == testClassFailedEvent.eventTime &&
+            testClassFailedEvent.result.failures.size() == 0
         def testProcessFailedEvent = result[6]
-        testProcessFailedEvent instanceof TestSuiteFailedEvent &&
-                testProcessFailedEvent.descriptor == testProcessStartedEvent.descriptor &&
-                ((TestSuiteFailedEvent) testProcessFailedEvent).result.startTime > 0 &&
-                ((TestSuiteFailedEvent) testProcessFailedEvent).result.endTime > ((TestSuiteFailedEvent) testProcessFailedEvent).result.startTime &&
-                ((TestSuiteFailedEvent) testProcessFailedEvent).result.exceptions.size() == 0
+        testProcessFailedEvent instanceof TestFinishEvent &&
+            testProcessFailedEvent.eventTime >= testProcessFailedEvent.result.endTime &&
+            testProcessFailedEvent.displayName == "Gradle Test Executor 2 failed" &&
+            testProcessFailedEvent.descriptor == testProcessStartedEvent.descriptor &&
+            testProcessFailedEvent.result instanceof TestFailureResult &&
+            testProcessFailedEvent.result.startTime == testProcessStartedEvent.eventTime &&
+            testProcessFailedEvent.result.endTime == testProcessFailedEvent.eventTime &&
+            testProcessFailedEvent.result.failures.size() == 0
         def rootFailedEvent = result[7]
-        rootFailedEvent instanceof TestSuiteFailedEvent &&
-                rootFailedEvent.descriptor == rootStartedEvent.descriptor &&
-                ((TestSuiteFailedEvent) rootFailedEvent).result.startTime > 0 &&
-                ((TestSuiteFailedEvent) rootFailedEvent).result.endTime > ((TestSuiteFailedEvent) rootFailedEvent).result.startTime &&
-                ((TestSuiteFailedEvent) rootFailedEvent).result.exceptions.size() == 0
+        rootFailedEvent instanceof TestFinishEvent &&
+            rootFailedEvent.eventTime >= rootFailedEvent.result.endTime &&
+            rootFailedEvent.displayName == "Gradle Test Run :test failed" &&
+            rootFailedEvent.descriptor == rootStartedEvent.descriptor &&
+            rootFailedEvent.result instanceof TestFailureResult &&
+            rootFailedEvent.result.startTime == rootStartedEvent.eventTime &&
+            rootFailedEvent.result.endTime == rootFailedEvent.eventTime &&
+            rootFailedEvent.result.failures.size() == 0
     }
 
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "receive test progress events for skipped test run"() {
         given:
         buildFile << """
@@ -287,64 +329,100 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
         """
 
         when:
-        Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
+        List<TestProgressEvent> result = new ArrayList<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        assert event != null
-                        result.add(event)
-                    }
-                }).run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.run()
         }
 
         then:
         result.size() % 2 == 0          // same number of start events as finish events
         result.size() == 8              // root suite, test process suite, test class suite, test method (each with a start and finish event)
+        result.each {
+            assert it.displayName == it.toString()
+            assert it.descriptor.displayName == it.descriptor.toString()
+        }
 
         def rootStartedEvent = result[0]
-        rootStartedEvent instanceof TestSuiteStartedEvent &&
-                rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
-                rootStartedEvent.descriptor.className == null &&
-                rootStartedEvent.descriptor.parent == null
+        rootStartedEvent instanceof TestStartEvent &&
+            rootStartedEvent.eventTime > 0 &&
+            rootStartedEvent.displayName == "Gradle Test Run :test started" &&
+            rootStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            rootStartedEvent.descriptor.name == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.displayName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.suiteName == 'Gradle Test Run :test' &&
+            rootStartedEvent.descriptor.className == null &&
+            rootStartedEvent.descriptor.methodName == null &&
+            rootStartedEvent.descriptor.parent == null
         def testProcessStartedEvent = result[1]
-        testProcessStartedEvent instanceof TestSuiteStartedEvent &&
-                testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
-                testProcessStartedEvent.descriptor.className == null &&
-                testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
+        testProcessStartedEvent instanceof TestStartEvent &&
+            testProcessStartedEvent.eventTime > 0 &&
+            testProcessStartedEvent.displayName == "Gradle Test Executor 2 started" &&
+            testProcessStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testProcessStartedEvent.descriptor.name == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.displayName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.suiteName == 'Gradle Test Executor 2' &&
+            testProcessStartedEvent.descriptor.className == null &&
+            testProcessStartedEvent.descriptor.methodName == null &&
+            testProcessStartedEvent.descriptor.parent == rootStartedEvent.descriptor
         def testClassStartedEvent = result[2]
-        testClassStartedEvent instanceof TestSuiteStartedEvent &&
-                testClassStartedEvent.descriptor.name == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.className == 'example.MyTest' &&
-                testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
+        testClassStartedEvent instanceof TestStartEvent &&
+            testClassStartedEvent.eventTime > 0 &&
+            testClassStartedEvent.displayName == "Test class example.MyTest started" &&
+            testClassStartedEvent.descriptor.jvmTestKind == JvmTestKind.SUITE &&
+            testClassStartedEvent.descriptor.name == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.displayName == "Test class example.MyTest" &&
+            testClassStartedEvent.descriptor.suiteName == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.className == 'example.MyTest' &&
+            testClassStartedEvent.descriptor.methodName == null &&
+            testClassStartedEvent.descriptor.parent == testProcessStartedEvent.descriptor
         def testStartedEvent = result[3]
-        testStartedEvent instanceof TestStartedEvent &&
-                testStartedEvent.descriptor.name == 'foo' &&
-                testStartedEvent.descriptor.className == 'example.MyTest' &&
-                testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
+        testStartedEvent instanceof TestStartEvent &&
+            testStartedEvent.eventTime > 0 &&
+            testStartedEvent.displayName == "Test foo(example.MyTest) started" &&
+            testStartedEvent.descriptor.jvmTestKind == JvmTestKind.ATOMIC &&
+            testStartedEvent.descriptor.name == 'foo' &&
+            testStartedEvent.descriptor.displayName == 'Test foo(example.MyTest)' &&
+            testStartedEvent.descriptor.suiteName == null &&
+            testStartedEvent.descriptor.className == 'example.MyTest' &&
+            testStartedEvent.descriptor.methodName == 'foo' &&
+            testStartedEvent.descriptor.parent == testClassStartedEvent.descriptor
         def testSkippedEvent = result[4]
-        testSkippedEvent instanceof TestSkippedEvent &&
-                testSkippedEvent.descriptor == testStartedEvent.descriptor
+        testSkippedEvent instanceof TestFinishEvent &&
+            testSkippedEvent.eventTime > 0 &&
+            testSkippedEvent.displayName == "Test foo(example.MyTest) skipped" &&
+            testSkippedEvent.descriptor == testStartedEvent.descriptor &&
+            testSkippedEvent.result instanceof TestSkippedResult &&
+            testSkippedEvent.result.startTime == testStartedEvent.eventTime &&
+            testSkippedEvent.result.endTime == testSkippedEvent.eventTime
         def testClassSucceededEvent = result[5]
-        testClassSucceededEvent instanceof TestSuiteSucceededEvent &&
-                testClassSucceededEvent.descriptor == testClassStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) testClassSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) testClassSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) testClassSucceededEvent).result.startTime
+        testClassSucceededEvent instanceof TestFinishEvent &&
+            testClassSucceededEvent.eventTime >= testClassSucceededEvent.result.endTime &&
+            testClassSucceededEvent.displayName == "Test class example.MyTest succeeded" &&
+            testClassSucceededEvent.descriptor == testClassStartedEvent.descriptor &&
+            testClassSucceededEvent.result instanceof TestSuccessResult &&
+            testClassSucceededEvent.result.startTime == testClassStartedEvent.eventTime &&
+            testClassSucceededEvent.result.endTime == testClassSucceededEvent.eventTime
         def testProcessSucceededEvent = result[6]
-        testProcessSucceededEvent instanceof TestSuiteSucceededEvent &&
-                testProcessSucceededEvent.descriptor == testProcessStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) testProcessSucceededEvent).result.startTime
+        testProcessSucceededEvent instanceof TestFinishEvent &&
+            testProcessSucceededEvent.eventTime >= testProcessSucceededEvent.result.endTime &&
+            testProcessSucceededEvent.displayName == "Gradle Test Executor 2 succeeded" &&
+            testProcessSucceededEvent.descriptor == testProcessStartedEvent.descriptor &&
+            testProcessSucceededEvent.result instanceof TestSuccessResult &&
+            testProcessSucceededEvent.result.startTime == testProcessStartedEvent.eventTime &&
+            testProcessSucceededEvent.result.endTime == testProcessSucceededEvent.eventTime
         def rootSucceededEvent = result[7]
-        rootSucceededEvent instanceof TestSuiteSucceededEvent &&
-                rootSucceededEvent.descriptor == rootStartedEvent.descriptor &&
-                ((TestSuiteSucceededEvent) rootSucceededEvent).result.startTime > 0 &&
-                ((TestSuiteSucceededEvent) rootSucceededEvent).result.endTime > ((TestSuiteSucceededEvent) rootSucceededEvent).result.startTime
+        rootSucceededEvent instanceof TestFinishEvent &&
+            rootSucceededEvent.eventTime >= rootSucceededEvent.result.endTime &&
+            rootSucceededEvent.displayName == "Gradle Test Run :test succeeded" &&
+            rootSucceededEvent.descriptor == rootStartedEvent.descriptor &&
+            rootSucceededEvent.result instanceof TestSuccessResult &&
+            rootSucceededEvent.result.startTime == rootStartedEvent.eventTime &&
+            rootSucceededEvent.result.endTime == rootSucceededEvent.eventTime
     }
 
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "test progress event ids are unique across multiple test workers"() {
         given:
         buildFile << """
@@ -402,13 +480,9 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
         Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        assert event != null
-                        result.add(event)
-                    }
-                }).run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.run()
         }
 
         then: "start and end event is sent for each node in the test tree"
@@ -423,10 +497,11 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
     }
 
     @Requires(TestPrecondition.NOT_WINDOWS)
-    @ToolingApiVersion(">=2.4")
-    @TargetGradleVersion(">=2.4")
     def "test progress event ids are unique across multiple test tasks, even when run in parallel"() {
         given:
+        if (!targetDist.toolingApiEventsInEmbeddedModeSupported) {
+            toolingApi.requireDaemons()
+        }
         projectDir.createFile('settings.gradle') << """
             include ':sub1'
             include ':sub2'
@@ -482,13 +557,9 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
         Queue<TestProgressEvent> result = new ConcurrentLinkedQueue<TestProgressEvent>()
         withConnection {
             ProjectConnection connection ->
-                connection.newBuild().forTasks('test').addTestProgressListener(new TestProgressListener() {
-                    @Override
-                    void statusChanged(TestProgressEvent event) {
-                        assert event != null
-                        result.add(event)
-                    }
-                }).withArguments('--parallel').run()
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    result << event
+                }.withArguments('--parallel').run()
         }
 
         then: "start and end event is sent for each node in the test tree"
@@ -506,4 +577,57 @@ class TestProgressCrossVersionSpec extends ToolingApiSpecification {
         result.findAll { it.descriptor.name =~ 'Gradle Test Executor \\d+' }.toSet().size() == 8       // 2 test processes for each task (start & finish events)
     }
 
+    @ToolingApiVersion("=2.4")
+    @TargetGradleVersion(">=2.5")
+    def "stops dispatching events to progress listeners when a listener fails and continues with build"() {
+        given:
+        goodCode()
+
+        when: "launching a build"
+        List<ProgressEvent> resultsOfFirstListener = []
+        List<ProgressEvent> resultsOfLastListener = []
+        def failure = new IllegalStateException("Throwing an exception on purpose")
+        def stdout = new ByteArrayOutputStream()
+        withConnection {
+            ProjectConnection connection ->
+                connection.newBuild().forTasks('test').addTestProgressListener { TestProgressEvent event ->
+                    resultsOfFirstListener.add(event)
+                }.addTestProgressListener { TestProgressEvent event ->
+                    throw failure
+                }.addTestProgressListener{ TestProgressEvent event ->
+                    resultsOfLastListener.add(event)
+                }.setStandardOutput(stdout).run()
+        }
+
+        then: "build completes with an exception but events are received"
+        def e = thrown(GradleConnectionException)
+        e.message.startsWith("Could not execute build using Gradle installation")
+        e.cause.message == "One or more progress listeners failed with an exception."
+        e.cause.cause == failure
+
+        and: "expected events received"
+        resultsOfFirstListener.size() == 1
+        resultsOfLastListener.size() == 1
+
+        and: "build execution is successful"
+        stdout.toString().contains("BUILD SUCCESSFUL")
+    }
+
+    def goodCode() {
+        buildFile << """
+            apply plugin: 'java'
+            repositories { mavenCentral() }
+            dependencies { testCompile 'junit:junit:4.12' }
+            compileTestJava.options.fork = true  // forked as 'Gradle Test Executor 1'
+        """
+
+        file("src/test/java/example/MyTest.java") << """
+            package example;
+            public class MyTest {
+                @org.junit.Test public void foo() throws Exception {
+                     org.junit.Assert.assertEquals(1, 1);
+                }
+            }
+        """
+    }
 }

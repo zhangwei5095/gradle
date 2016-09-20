@@ -16,26 +16,34 @@
 package org.gradle.internal.service.scopes
 
 import org.gradle.StartParameter
+import org.gradle.api.internal.GradleInternal
+import org.gradle.api.internal.cache.StringInterner
 import org.gradle.api.internal.changedetection.state.InMemoryTaskArtifactCache
+import org.gradle.api.internal.file.FileCollectionFactory
+import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory
 import org.gradle.api.internal.tasks.TaskExecuter
 import org.gradle.api.internal.tasks.execution.ExecuteAtMostOnceTaskExecuter
 import org.gradle.api.invocation.Gradle
 import org.gradle.cache.CacheBuilder
 import org.gradle.cache.CacheRepository
 import org.gradle.cache.PersistentCache
+import org.gradle.execution.TaskGraphExecuter
+import org.gradle.internal.classloader.ClassLoaderHierarchyHasher
 import org.gradle.internal.concurrent.ExecutorFactory
 import org.gradle.internal.environment.GradleBuildEnvironment
+import org.gradle.internal.event.ListenerManager
+import org.gradle.internal.nativeplatform.filesystem.FileSystem
 import org.gradle.internal.operations.BuildOperationProcessor
 import org.gradle.internal.operations.DefaultBuildOperationProcessor
 import org.gradle.internal.reflect.Instantiator
 import org.gradle.internal.service.DefaultServiceRegistry
 import org.gradle.internal.service.ServiceRegistry
-import org.gradle.internal.event.ListenerManager
 import spock.lang.Specification
 
 class TaskExecutionServicesTest extends Specification {
-    final ServiceRegistry parent = Mock()
-    final Gradle gradle = Mock()
+    final def parent = Mock(ServiceRegistry)
+    final def gradle = Mock(GradleInternal)
     final def services = new DefaultServiceRegistry(parent).addProvider(new TaskExecutionServices())
 
     def "makes a TaskExecutor available"() {
@@ -43,12 +51,23 @@ class TaskExecutionServicesTest extends Specification {
         CacheRepository cacheRepository = Mock()
         CacheBuilder cacheBuilder = Mock()
         _ * parent.get(Gradle) >> gradle
+        _ * parent.get(GradleInternal) >> gradle
+        gradle.getTaskGraph() >> Mock(TaskGraphExecuter)
         _ * parent.get(ListenerManager) >> Mock(ListenerManager)
-        _ * parent.get(StartParameter) >> Mock(StartParameter)
+        _ * parent.get(StartParameter) >> Mock(StartParameter) {
+            getSystemPropertiesArgs() >> [:]
+        }
         _ * parent.get(GradleBuildEnvironment) >> Stub(GradleBuildEnvironment)
         _ * parent.get(CacheRepository) >> cacheRepository
         _ * parent.get(Instantiator) >> Mock(Instantiator)
         _ * parent.get(InMemoryTaskArtifactCache) >> Mock(InMemoryTaskArtifactCache)
+        _ * parent.get(StartParameter) >> Mock(StartParameter)
+        _ * parent.get(FileResolver) >> Mock(FileResolver)
+        _ * parent.get(FileSystem) >> Mock(FileSystem)
+        _ * parent.get(FileCollectionFactory) >> Mock(FileCollectionFactory)
+        _ * parent.get(StringInterner) >> new StringInterner()
+        _ * parent.get(DirectoryFileTreeFactory) >> Mock(DirectoryFileTreeFactory)
+        _ * parent.get(ClassLoaderHierarchyHasher) >> Mock(ClassLoaderHierarchyHasher)
         _ * cacheRepository.cache(gradle, 'taskArtifacts') >> cacheBuilder
         _ * cacheBuilder.withDisplayName(!null) >> cacheBuilder
         _ * cacheBuilder.withLockOptions(!null) >> cacheBuilder

@@ -25,9 +25,9 @@ import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultV
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionSelectorScheme
 import org.gradle.api.specs.Specs
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier
-import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetaData
-import org.gradle.internal.component.model.ComponentResolveMetaData
-import org.gradle.internal.component.model.DependencyMetaData
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata
+import org.gradle.internal.component.model.ComponentResolveMetadata
+import org.gradle.internal.component.model.DependencyMetadata
 import org.gradle.internal.resolve.ModuleVersionResolveException
 import org.gradle.internal.resolve.result.DefaultBuildableComponentSelectionResult
 import org.gradle.internal.resolve.result.DefaultBuildableModuleComponentMetaDataResolveResult
@@ -46,13 +46,13 @@ class DefaultVersionedComponentChooserTest extends Specification {
     def chooser = new DefaultVersionedComponentChooser(versionComparator, versionSelectorScheme, componentSelectionRules)
 
     def "chooses latest version for component meta data"() {
-        def one = Stub(ComponentResolveMetaData) {
+        def one = Stub(ComponentResolveMetadata) {
             getId() >> DefaultModuleVersionIdentifier.newId("group", "name", "1.0")
         }
-        def two = Stub(ComponentResolveMetaData) {
+        def two = Stub(ComponentResolveMetadata) {
             getId() >> DefaultModuleVersionIdentifier.newId("group", "name", "1.1")
         }
-        def three = Stub(ComponentResolveMetaData) {
+        def three = Stub(ComponentResolveMetadata) {
             getId() >> DefaultModuleVersionIdentifier.newId("group", "name", "1.2")
         }
 
@@ -70,10 +70,10 @@ class DefaultVersionedComponentChooserTest extends Specification {
     }
 
     def "chooses non-generated descriptor over generated"() {
-        def one = Mock(ComponentResolveMetaData) {
+        def one = Mock(ComponentResolveMetadata) {
             getId() >> DefaultModuleVersionIdentifier.newId("group", "name", "1.0")
         }
-        def two = Mock(ComponentResolveMetaData) {
+        def two = Mock(ComponentResolveMetadata) {
             getId() >> DefaultModuleVersionIdentifier.newId("group", "name", "1.0")
         }
 
@@ -97,14 +97,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "1.+")
         def selected = DefaultModuleComponentIdentifier.newId("group", "name", "1.3")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.requested >> selector
@@ -126,15 +126,15 @@ class DefaultVersionedComponentChooserTest extends Specification {
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.requested >> selector
-        _ * dependency.withRequestedVersion(_) >> Stub(DependencyMetaData)
+        _ * dependency.withRequestedVersion(_) >> Stub(DependencyMetadata)
         _ * a.version >> "1.2"
         _ * b.version >> "1.3"
         _ * b.id >> selected
@@ -152,14 +152,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "1.+")
         def selected = DefaultModuleComponentIdentifier.newId("group", "name", "1.3")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.getRequested() >> selector
@@ -182,18 +182,18 @@ class DefaultVersionedComponentChooserTest extends Specification {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "latest.release")
         def selected = DefaultModuleComponentIdentifier.newId("group", "name", "1.3")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.requested >> selector
-        _ * dependency.withRequestedVersion(_) >> Stub(DependencyMetaData)
+        _ * dependency.withRequestedVersion(_) >> Stub(DependencyMetadata)
         _ * a.version >> "1.2"
         _ * b.version >> "1.3"
         _ * b.id >> selected
@@ -215,14 +215,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
     def "returns no match when no versions match without metadata"() {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "1.1")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, b, a], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, b, a], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.requested >> selector
@@ -239,14 +239,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
     def "returns no match when no versions are chosen with metadata"() {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "latest.release")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.getRequested() >> selector
@@ -266,14 +266,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
     def "returns no match when all matching versions match are rejected by rule"() {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "+")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.getRequested() >> selector
@@ -295,14 +295,14 @@ class DefaultVersionedComponentChooserTest extends Specification {
     def "stops when candidate cannot be resolved"() {
         given:
         def selector = new DefaultModuleVersionSelector("group", "name", "latest.release")
-        def dependency = Mock(DependencyMetaData)
+        def dependency = Mock(DependencyMetadata)
         def a = Mock(ModuleComponentResolveState)
         def b = Mock(ModuleComponentResolveState)
         def c = Mock(ModuleComponentResolveState)
         def selectedComponentResult = new DefaultBuildableComponentSelectionResult()
 
         when:
-        chooser.selectNewestMatchingComponent([c, a, b], dependency, selectedComponentResult)
+        chooser.selectNewestMatchingComponent([c, a, b], selectedComponentResult, dependency.getRequested())
 
         then:
         _ * dependency.getRequested() >> selector
@@ -319,7 +319,7 @@ class DefaultVersionedComponentChooserTest extends Specification {
     }
 
     def resolvedWithStatus(String status) {
-        def meta = Stub(MutableModuleComponentResolveMetaData) {
+        def meta = Stub(ModuleComponentResolveMetadata) {
             getStatusScheme() >> ["integration", "milestone", "release"]
             getStatus() >> status
         }

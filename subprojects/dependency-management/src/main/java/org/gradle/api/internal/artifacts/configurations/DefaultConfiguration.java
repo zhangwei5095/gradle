@@ -16,71 +16,127 @@
 
 package org.gradle.api.internal.artifacts.configurations;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import groovy.lang.Closure;
 import org.gradle.api.Action;
 import org.gradle.api.DomainObjectSet;
 import org.gradle.api.InvalidUserDataException;
-import org.gradle.api.artifacts.*;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.DependencyResolutionListener;
+import org.gradle.api.artifacts.DependencySet;
+import org.gradle.api.artifacts.ExcludeRule;
+import org.gradle.api.artifacts.FileCollectionDependency;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.PublishArtifactSet;
+import org.gradle.api.artifacts.ResolutionStrategy;
+import org.gradle.api.artifacts.ResolvableDependencies;
+import org.gradle.api.artifacts.ResolvedConfiguration;
+import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.result.ResolutionResult;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.CompositeDomainObjectSet;
 import org.gradle.api.internal.DefaultDomainObjectSet;
-import org.gradle.api.internal.artifacts.*;
-import org.gradle.api.internal.artifacts.configurations.MutationValidator.MutationType;
+import org.gradle.api.internal.artifacts.ConfigurationResolver;
+import org.gradle.api.internal.artifacts.DefaultDependencySet;
+import org.gradle.api.internal.artifacts.DefaultExcludeRule;
+import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
+import org.gradle.api.internal.artifacts.DefaultPublishArtifactSet;
+import org.gradle.api.internal.artifacts.DefaultResolverResults;
+import org.gradle.api.internal.artifacts.ExcludeRuleNotationConverter;
+import org.gradle.api.internal.artifacts.Module;
+import org.gradle.api.internal.artifacts.ResolverResults;
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.dsl.dependencies.ProjectFinder;
+import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.ConfigurationComponentMetaDataBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.projectresult.ResolvedProjectConfiguration;
 import org.gradle.api.internal.file.AbstractFileCollection;
+import org.gradle.api.internal.file.FileCollectionFactory;
+import org.gradle.api.internal.file.FileSystemSubset;
+import org.gradle.api.internal.project.ProjectInternal;
+import org.gradle.api.internal.tasks.DefaultTaskDependency;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.TaskDependency;
 import org.gradle.initialization.ProjectAccessListener;
-import org.gradle.listener.ClosureBackedMethodInvocationDispatch;
+import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
+import org.gradle.internal.component.model.ComponentResolveMetadata;
 import org.gradle.internal.event.ListenerBroadcast;
 import org.gradle.internal.event.ListenerManager;
+import org.gradle.listener.ClosureBackedMethodInvocationDispatch;
 import org.gradle.util.CollectionUtils;
-import org.gradle.util.ConfigureUtil;
-import org.gradle.util.DeprecationLogger;
 import org.gradle.util.WrapUtil;
 
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import static org.apache.ivy.core.module.descriptor.Configuration.Visibility;
-
-public class DefaultConfiguration extends AbstractFileCollection implements ConfigurationInternal {
-
-    private final String path;
-    private final String name;
-
-    private Visibility visibility = Visibility.PUBLIC;
-    private boolean transitive = true;
-    private Set<Configuration> extendsFrom = new LinkedHashSet<Configuration>();
-    private String description;
-    private ConfigurationsProvider configurationsProvider;
+public class DefaultConfiguration extends AbstractFileCollection implements ConfigurationInternal, MutationValidator {
     private final ConfigurationResolver resolver;
     private final ListenerManager listenerManager;
     private final DependencyMetaDataProvider metaDataProvider;
     private final DefaultDependencySet dependencies;
     private final CompositeDomainObjectSet<Dependency> inheritedDependencies;
     private final DefaultDependencySet allDependencies;
+    private final List<Action<? super DependencySet>> defaultDependencyActions = new ArrayList<Action<? super DependencySet>>();
     private final DefaultPublishArtifactSet artifacts;
     private final CompositeDomainObjectSet<PublishArtifact> inheritedArtifacts;
     private final DefaultPublishArtifactSet allArtifacts;
     private final ConfigurationResolvableDependencies resolvableDependencies = new ConfigurationResolvableDependencies();
-    private final ListenerBroadcast<DependencyResolutionListener> resolutionListenerBroadcast;
-    private Set<ExcludeRule> excludeRules = new LinkedHashSet<ExcludeRule>();
+    private final ListenerBroadcast<DependencyResolutionListener> dependencyResolutionListeners;
     private final ProjectAccessListener projectAccessListener;
-
-    // This lock only protects the following fields
-    private final Object lock = new Object();
-    private State state = State.UNRESOLVED;
-    private boolean includedInResult;
-    private ResolverResults cachedResolverResults;
+    private final ProjectFinder projectFinder;
     private final ResolutionStrategyInternal resolutionStrategy;
+    private final ConfigurationComponentMetaDataBuilder configurationComponentMetaDataBuilder;
+    private final FileCollectionFactory fileCollectionFactory;
+    private final ComponentIdentifierFactory componentIdentifierFactory;
+
+    private final Set<MutationValidator> childMutationValidators = Sets.newHashSet();
+    private final MutationValidator parentMutationValidator = new MutationValidator() {
+        @Override
+        public void validateMutation(MutationType type) {
+            DefaultConfiguration.this.validateParentMutation(type);
+        }
+    };
+
+    // These fields are not covered by mutation lock
+    private final String path;
+    private final String name;
+
+    private boolean visible = true;
+    private boolean transitive = true;
+    private Set<Configuration> extendsFrom = new LinkedHashSet<Configuration>();
+    private String description;
+    private ConfigurationsProvider configurationsProvider;
+    private Set<ExcludeRule> excludeRules = new LinkedHashSet<ExcludeRule>();
+
+    private final Object observationLock = new Object();
+    private InternalState observedState = InternalState.UNRESOLVED;
+    private final Object resolutionLock = new Object();
+    private InternalState resolvedState = InternalState.UNRESOLVED;
+    private boolean insideBeforeResolve;
+
+    private ResolverResults cachedResolverResults = new DefaultResolverResults();
+    private boolean dependenciesModified;
+    private Map<String, String> attributes;
 
     public DefaultConfiguration(String path, String name, ConfigurationsProvider configurationsProvider,
                                 ConfigurationResolver resolver, ListenerManager listenerManager,
                                 DependencyMetaDataProvider metaDataProvider,
                                 ResolutionStrategyInternal resolutionStrategy,
-                                ProjectAccessListener projectAccessListener) {
+                                ProjectAccessListener projectAccessListener,
+                                ProjectFinder projectFinder,
+                                ConfigurationComponentMetaDataBuilder configurationComponentMetaDataBuilder,
+                                FileCollectionFactory fileCollectionFactory, ComponentIdentifierFactory componentIdentifierFactory) {
         this.path = path;
         this.name = name;
         this.configurationsProvider = configurationsProvider;
@@ -89,30 +145,38 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         this.metaDataProvider = metaDataProvider;
         this.resolutionStrategy = resolutionStrategy;
         this.projectAccessListener = projectAccessListener;
+        this.projectFinder = projectFinder;
+        this.configurationComponentMetaDataBuilder = configurationComponentMetaDataBuilder;
+        this.fileCollectionFactory = fileCollectionFactory;
+        this.componentIdentifierFactory = componentIdentifierFactory;
 
-        resolutionListenerBroadcast = listenerManager.createAnonymousBroadcaster(DependencyResolutionListener.class);
-
-        RunnableMutationValidator veto = new RunnableMutationValidator(MutationType.CONTENT) {
-            @Override
-            public void validateMutation(MutationType type) {
-                DefaultConfiguration.this.validateMutation(type);
-            }
-        };
+        dependencyResolutionListeners = listenerManager.createAnonymousBroadcaster(DependencyResolutionListener.class);
 
         DefaultDomainObjectSet<Dependency> ownDependencies = new DefaultDomainObjectSet<Dependency>(Dependency.class);
-        ownDependencies.beforeChange(veto);
+        ownDependencies.beforeChange(validateMutationType(this, MutationType.DEPENDENCIES));
 
-        dependencies = new DefaultDependencySet(String.format("%s dependencies", getDisplayName()), ownDependencies);
+        final String displayName = getDisplayName();
+        dependencies = new DefaultDependencySet(displayName + " dependencies", this, ownDependencies);
         inheritedDependencies = CompositeDomainObjectSet.create(Dependency.class, ownDependencies);
-        allDependencies = new DefaultDependencySet(String.format("%s all dependencies", getDisplayName()), inheritedDependencies);
+        allDependencies = new DefaultDependencySet(displayName + " all dependencies", this, inheritedDependencies);
 
         DefaultDomainObjectSet<PublishArtifact> ownArtifacts = new DefaultDomainObjectSet<PublishArtifact>(PublishArtifact.class);
-        ownArtifacts.beforeChange(veto);
-        artifacts = new DefaultPublishArtifactSet(String.format("%s artifacts", getDisplayName()), ownArtifacts);
-        inheritedArtifacts = CompositeDomainObjectSet.create(PublishArtifact.class, ownArtifacts);
-        allArtifacts = new DefaultPublishArtifactSet(String.format("%s all artifacts", getDisplayName()), inheritedArtifacts);
+        ownArtifacts.beforeChange(validateMutationType(this, MutationType.ARTIFACTS));
 
-        resolutionStrategy.beforeChange(veto);
+        artifacts = new DefaultPublishArtifactSet(displayName + " artifacts", ownArtifacts, fileCollectionFactory);
+        inheritedArtifacts = CompositeDomainObjectSet.create(PublishArtifact.class, ownArtifacts);
+        allArtifacts = new DefaultPublishArtifactSet(displayName + " all artifacts", inheritedArtifacts, fileCollectionFactory);
+
+        resolutionStrategy.setMutationValidator(this);
+    }
+
+    private static Runnable validateMutationType(final MutationValidator mutationValidator, final MutationType type) {
+        return new Runnable() {
+            @Override
+            public void run() {
+                mutationValidator.validateMutation(type);
+            }
+        };
     }
 
     public String getName() {
@@ -120,22 +184,35 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     public State getState() {
-        synchronized (lock) {
-            return state;
+        synchronized (resolutionLock) {
+            if (resolvedState == InternalState.RESULTS_RESOLVED || resolvedState == InternalState.TASK_DEPENDENCIES_RESOLVED) {
+                if (cachedResolverResults.hasError()) {
+                    return State.RESOLVED_WITH_FAILURES;
+                } else {
+                    return State.RESOLVED;
+                }
+            } else {
+                return State.UNRESOLVED;
+            }
         }
     }
 
-    public ModuleInternal getModule() {
+    @Override
+    public InternalState getResolvedState() {
+        return resolvedState;
+    }
+
+    public Module getModule() {
         return metaDataProvider.getModule();
     }
 
     public boolean isVisible() {
-        return visibility == Visibility.PUBLIC;
+        return visible;
     }
 
     public Configuration setVisible(boolean visible) {
-        validateMutation(MutationType.CONTENT);
-        this.visibility = visible ? Visibility.PUBLIC : Visibility.PRIVATE;
+        validateMutation(MutationType.DEPENDENCIES);
+        this.visible = visible;
         return this;
     }
 
@@ -144,10 +221,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     public Configuration setExtendsFrom(Iterable<Configuration> extendsFrom) {
-        validateMutation(MutationType.CONTENT);
+        validateMutation(MutationType.DEPENDENCIES);
         for (Configuration configuration : this.extendsFrom) {
             inheritedArtifacts.removeCollection(configuration.getAllArtifacts());
             inheritedDependencies.removeCollection(configuration.getAllDependencies());
+            ((ConfigurationInternal) configuration).removeMutationValidator(parentMutationValidator);
         }
         this.extendsFrom = new HashSet<Configuration>();
         for (Configuration configuration : extendsFrom) {
@@ -157,16 +235,18 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     public Configuration extendsFrom(Configuration... extendsFrom) {
-        validateMutation(MutationType.CONTENT);
+        validateMutation(MutationType.DEPENDENCIES);
         for (Configuration configuration : extendsFrom) {
             if (configuration.getHierarchy().contains(this)) {
                 throw new InvalidUserDataException(String.format(
-                        "Cyclic extendsFrom from %s and %s is not allowed. See existing hierarchy: %s", this,
-                        configuration, configuration.getHierarchy()));
+                    "Cyclic extendsFrom from %s and %s is not allowed. See existing hierarchy: %s", this,
+                    configuration, configuration.getHierarchy()));
             }
-            this.extendsFrom.add(configuration);
-            inheritedArtifacts.addCollection(configuration.getAllArtifacts());
-            inheritedDependencies.addCollection(configuration.getAllDependencies());
+            if (this.extendsFrom.add(configuration)) {
+                inheritedArtifacts.addCollection(configuration.getAllArtifacts());
+                inheritedDependencies.addCollection(configuration.getAllDependencies());
+                ((ConfigurationInternal) configuration).addMutationValidator(parentMutationValidator);
+            }
         }
         return this;
     }
@@ -176,7 +256,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     public Configuration setTransitive(boolean transitive) {
-        validateMutation(MutationType.CONTENT);
+        validateMutation(MutationType.DEPENDENCIES);
         this.transitive = transitive;
         return this;
     }
@@ -203,6 +283,28 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
             }
             result.add(superConfig);
             collectSuperConfigs(superConfig, result);
+        }
+    }
+
+    @Override
+    public Configuration defaultDependencies(Action<? super DependencySet> action) {
+        validateMutation(MutationType.DEPENDENCIES);
+        this.defaultDependencyActions.add(action);
+        return this;
+    }
+
+    @Override
+    public void triggerWhenEmptyActionsIfNecessary() {
+        if (!defaultDependencyActions.isEmpty()) {
+            for (Action<? super DependencySet> action : defaultDependencyActions) {
+                if (!dependencies.isEmpty()) {
+                    break;
+                }
+                action.execute(dependencies);
+            }
+        }
+        for (Configuration superConfig : extendsFrom) {
+            ((ConfigurationInternal) superConfig).triggerWhenEmptyActionsIfNecessary();
         }
     }
 
@@ -242,40 +344,111 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         return new ConfigurationFileCollection(WrapUtil.toLinkedSet(dependencies));
     }
 
-    public void includedInResolveResult() {
-        includedInResult = true;
-        for (Configuration configuration : extendsFrom) {
-            ((ConfigurationInternal) configuration).includedInResolveResult();
-        }
+    public void markAsObserved(InternalState requestedState) {
+        markThisObserved(requestedState);
+        markParentsObserved(requestedState);
     }
 
-    public ResolvedConfiguration getResolvedConfiguration() {
-        resolveNow();
-        return cachedResolverResults.getResolvedConfiguration();
-    }
-
-    private void resolveNow() {
-        synchronized (lock) {
-            if (state == State.UNRESOLVED) {
-                DependencyResolutionListener broadcast = getDependencyResolutionBroadcast();
-                ResolvableDependencies incoming = getIncoming();
-                broadcast.beforeResolve(incoming);
-                cachedResolverResults = resolver.resolve(this);
-                for (Configuration configuration : extendsFrom) {
-                    ((ConfigurationInternal) configuration).includedInResolveResult();
-                }
-                if (cachedResolverResults.getResolvedConfiguration().hasError()) {
-                    state = State.RESOLVED_WITH_FAILURES;
-                } else {
-                    state = State.RESOLVED;
-                }
-                broadcast.afterResolve(incoming);
+    private void markThisObserved(InternalState requestedState) {
+        synchronized (observationLock) {
+            if (observedState.compareTo(requestedState) < 0) {
+                observedState = requestedState;
             }
         }
     }
 
+    private void markParentsObserved(InternalState requestedState) {
+        for (Configuration configuration : extendsFrom) {
+            ((ConfigurationInternal) configuration).markAsObserved(requestedState);
+        }
+    }
+
+    public ResolvedConfiguration getResolvedConfiguration() {
+        resolveNow(InternalState.RESULTS_RESOLVED);
+        return cachedResolverResults.getResolvedConfiguration();
+    }
+
+    private void resolveNow(InternalState requestedState) {
+        synchronized (resolutionLock) {
+            if (requestedState == InternalState.TASK_DEPENDENCIES_RESOLVED || requestedState == InternalState.RESULTS_RESOLVED) {
+                resolveGraphIfRequired(requestedState);
+            }
+            if (requestedState == InternalState.RESULTS_RESOLVED) {
+                resolveArtifactsIfRequired();
+            }
+        }
+    }
+
+    private void resolveGraphIfRequired(final InternalState requestedState) {
+        if (resolvedState == InternalState.RESULTS_RESOLVED) {
+            if (dependenciesModified) {
+                throw new InvalidUserDataException(String.format("Attempted to resolve %s that has been resolved previously.", getDisplayName()));
+            }
+            return;
+        }
+        if (resolvedState == InternalState.TASK_DEPENDENCIES_RESOLVED) {
+            if (!dependenciesModified) {
+                return;
+            }
+            throw new InvalidUserDataException(String.format("Resolved %s again after modification", getDisplayName()));
+        }
+
+        ResolvableDependencies incoming = getIncoming();
+        performPreResolveActions(incoming);
+
+        resolver.resolve(this, cachedResolverResults);
+        dependenciesModified = false;
+        if (resolvedState != InternalState.RESULTS_RESOLVED) {
+            resolvedState = InternalState.TASK_DEPENDENCIES_RESOLVED;
+        }
+
+        // Mark all affected configurations as observed
+        markParentsObserved(requestedState);
+        markReferencedProjectConfigurationsObserved(requestedState);
+
+        dependencyResolutionListeners.getSource().afterResolve(incoming);
+    }
+
+    private void performPreResolveActions(ResolvableDependencies incoming) {
+        DependencyResolutionListener dependencyResolutionListener = dependencyResolutionListeners.getSource();
+        insideBeforeResolve = true;
+        try {
+            dependencyResolutionListener.beforeResolve(incoming);
+        } finally {
+            insideBeforeResolve = false;
+        }
+        triggerWhenEmptyActionsIfNecessary();
+    }
+
+    private void markReferencedProjectConfigurationsObserved(final InternalState requestedState) {
+        for (ResolvedProjectConfiguration projectResult : cachedResolverResults.getResolvedLocalComponents().getResolvedProjectConfigurations()) {
+            if (projectResult.getId().getBuild().isCurrentBuild()) {
+                ProjectInternal project = projectFinder.getProject(projectResult.getId().getProjectPath());
+                ConfigurationInternal targetConfig = (ConfigurationInternal) project.getConfigurations().getByName(projectResult.getTargetConfiguration());
+                targetConfig.markAsObserved(requestedState);
+            }
+        }
+    }
+
+    private void resolveArtifactsIfRequired() {
+        if (resolvedState == InternalState.RESULTS_RESOLVED) {
+            return;
+        }
+        resolver.resolveArtifacts(this, cachedResolverResults);
+        resolvedState = InternalState.RESULTS_RESOLVED;
+    }
+
     public TaskDependency getBuildDependencies() {
-        return allDependencies.getBuildDependencies();
+        if (resolutionStrategy.resolveGraphToDetermineTaskDependencies()) {
+            final DefaultTaskDependency taskDependency = new DefaultTaskDependency();
+            resolveNow(InternalState.TASK_DEPENDENCIES_RESOLVED);
+
+            taskDependency.add(cachedResolverResults.getResolvedLocalComponents().getComponentBuildDependencies());
+            taskDependency.add(DirectBuildDependencies.forDependenciesOnly(this));
+            return taskDependency;
+        } else {
+            return allDependencies.getBuildDependencies();
+        }
     }
 
     /**
@@ -310,12 +483,12 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     public void setExcludeRules(Set<ExcludeRule> excludeRules) {
-        validateMutation(MutationType.CONTENT);
+        validateMutation(MutationType.DEPENDENCIES);
         this.excludeRules = excludeRules;
     }
 
     public DefaultConfiguration exclude(Map<String, String> excludeRuleArgs) {
-        validateMutation(MutationType.CONTENT);
+        validateMutation(MutationType.DEPENDENCIES);
         excludeRules.add(ExcludeRuleNotationConverter.parser().parseNotation(excludeRuleArgs)); //TODO SF try using ExcludeRuleContainer
         return this;
     }
@@ -336,7 +509,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         return resolvableDependencies;
     }
 
-    public Configuration copy() {
+    public ConfigurationInternal copy() {
         return createCopy(getDependencies(), false);
     }
 
@@ -355,14 +528,16 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     private DefaultConfiguration createCopy(Set<Dependency> dependencies, boolean recursive) {
         DetachedConfigurationsProvider configurationsProvider = new DetachedConfigurationsProvider();
         DefaultConfiguration copiedConfiguration = new DefaultConfiguration(path + "Copy", name + "Copy",
-                configurationsProvider, resolver, listenerManager, metaDataProvider, resolutionStrategy.copy(), projectAccessListener);
+            configurationsProvider, resolver, listenerManager, metaDataProvider, resolutionStrategy.copy(), projectAccessListener, projectFinder, configurationComponentMetaDataBuilder, fileCollectionFactory, componentIdentifierFactory);
         configurationsProvider.setTheOnlyConfiguration(copiedConfiguration);
         // state, cachedResolvedConfiguration, and extendsFrom intentionally not copied - must re-resolve copy
         // copying extendsFrom could mess up dependencies when copy was re-resolved
 
-        copiedConfiguration.visibility = visibility;
+        copiedConfiguration.visible = visible;
         copiedConfiguration.transitive = transitive;
         copiedConfiguration.description = description;
+
+        copiedConfiguration.defaultDependencyActions.addAll(defaultDependencyActions);
 
         copiedConfiguration.getArtifacts().addAll(getAllArtifacts());
 
@@ -396,35 +571,89 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         return copyRecursive(Specs.<Dependency>convertClosureToSpec(dependencySpec));
     }
 
-    public DependencyResolutionListener getDependencyResolutionBroadcast() {
-        return resolutionListenerBroadcast.getSource();
-    }
-
     public ResolutionStrategyInternal getResolutionStrategy() {
         return resolutionStrategy;
+    }
+
+    public ComponentResolveMetadata toRootComponentMetaData() {
+        Module module = getModule();
+        Set<? extends Configuration> configurations = getAll();
+        ComponentIdentifier componentIdentifier = componentIdentifierFactory.createComponentIdentifier(module);
+        ModuleVersionIdentifier moduleVersionIdentifier = DefaultModuleVersionIdentifier.newId(module);
+        DefaultLocalComponentMetadata metaData = new DefaultLocalComponentMetadata(moduleVersionIdentifier, componentIdentifier, module.getStatus());
+        configurationComponentMetaDataBuilder.addConfigurations(metaData, configurations);
+        return metaData;
     }
 
     public String getPath() {
         return path;
     }
 
+    @Override
     public Configuration resolutionStrategy(Closure closure) {
-        ConfigureUtil.configure(closure, resolutionStrategy);
+        return resolutionStrategy(ClosureBackedAction.of(closure));
+    }
+
+    @Override
+    public Configuration resolutionStrategy(Action<? super ResolutionStrategy> action) {
+        action.execute(resolutionStrategy);
         return this;
     }
 
-    private void validateMutation(MutationType type) {
-        boolean userAlreadyNagged = false;
-        if (getState() != State.UNRESOLVED) {
-            if (type == MutationType.CONTENT) {
-                throw new InvalidUserDataException(String.format("Cannot change %s after it has been resolved.", getDisplayName()));
-            } else {
-                userAlreadyNagged = true;
-                DeprecationLogger.nagUserOfDeprecatedBehaviour(String.format("Attempting to change %s after it has been resolved", getDisplayName()));
+    @Override
+    public void addMutationValidator(MutationValidator validator) {
+        childMutationValidators.add(validator);
+    }
+
+    @Override
+    public void removeMutationValidator(MutationValidator validator) {
+        childMutationValidators.remove(validator);
+    }
+
+    private void validateParentMutation(MutationType type) {
+        // Strategy changes in a parent configuration do not affect this configuration, or any of its children, in any way
+        if (type == MutationType.STRATEGY) {
+            return;
+        }
+
+        if (resolvedState == InternalState.RESULTS_RESOLVED) {
+            throw new InvalidUserDataException(String.format("Cannot change %s of parent of %s after it has been resolved", type, getDisplayName()));
+        } else if (resolvedState == InternalState.TASK_DEPENDENCIES_RESOLVED) {
+            if (type == MutationType.DEPENDENCIES) {
+                throw new InvalidUserDataException(String.format("Cannot change %s of parent of %s after task dependencies have been resolved", type, getDisplayName()));
             }
         }
-        if (!userAlreadyNagged && includedInResult) {
-            DeprecationLogger.nagUserOfDeprecatedBehaviour(String.format("Attempting to change %s after it has been included in dependency resolution", getDisplayName()));
+
+        markAsModifiedAndNotifyChildren(type);
+    }
+
+    public void validateMutation(MutationType type) {
+        if (resolvedState == InternalState.RESULTS_RESOLVED) {
+            // The public result for the configuration has been calculated.
+            // It is an error to change anything that would change the dependencies or artifacts
+            throw new InvalidUserDataException(String.format("Cannot change %s of %s after it has been resolved.", type, getDisplayName()));
+        } else if (resolvedState == InternalState.TASK_DEPENDENCIES_RESOLVED) {
+            // The task dependencies for the configuration have been calculated using Configuration.getBuildDependencies().
+            throw new InvalidUserDataException(String.format("Cannot change %s of %s after task dependencies have been resolved", type, getDisplayName()));
+        } else if (observedState == InternalState.TASK_DEPENDENCIES_RESOLVED || observedState == InternalState.RESULTS_RESOLVED) {
+            // The configuration has been used in a resolution, and it is an error for build logic to change any dependencies,
+            // exclude rules or parent configurations (values that will affect the resolved graph).
+            if (type != MutationType.STRATEGY) {
+                String extraMessage = insideBeforeResolve ? " Use 'defaultDependencies' instead of 'beforeResolve' to specify default dependencies for a configuration." : "";
+                throw new InvalidUserDataException(String.format("Cannot change %s of %s after it has been included in dependency resolution.%s", type, getDisplayName(), extraMessage));
+            }
+        }
+
+        markAsModifiedAndNotifyChildren(type);
+    }
+
+    private void markAsModifiedAndNotifyChildren(MutationType type) {
+        // Notify child configurations
+        for (MutationValidator validator : childMutationValidators) {
+            validator.validateMutation(type);
+        }
+        if (type != MutationType.STRATEGY) {
+            dependenciesModified = true;
         }
     }
 
@@ -457,11 +686,11 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         }
 
         public String getDisplayName() {
-            return String.format("%s dependencies", DefaultConfiguration.this);
+            return DefaultConfiguration.this + " dependencies";
         }
 
         public Set<File> getFiles() {
-            synchronized (lock) {
+            synchronized (resolutionLock) {
                 ResolvedConfiguration resolvedConfiguration = getResolvedConfiguration();
                 if (getState() == State.RESOLVED_WITH_FAILURES) {
                     resolvedConfiguration.rethrowFailure();
@@ -469,6 +698,46 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
                 return resolvedConfiguration.getFiles(dependencySpec);
             }
         }
+    }
+
+    @Override
+    public void registerWatchPoints(FileSystemSubset.Builder builder) {
+        for (Dependency dependency : allDependencies) {
+            if (dependency instanceof FileCollectionDependency) {
+                ((FileCollectionDependency) dependency).registerWatchPoints(builder);
+            }
+        }
+        super.registerWatchPoints(builder);
+    }
+
+    @Override
+    public Configuration attribute(String key, String value) {
+        ensureAttributes();
+        attributes.put(key, value);
+        return this;
+    }
+
+    @Override
+    public Configuration attributes(Map<String, String> attributes) {
+        ensureAttributes();
+        this.attributes.putAll(attributes);
+        return this;
+    }
+
+    private void ensureAttributes() {
+        if (this.attributes == null) {
+            this.attributes = new HashMap<String, String>();
+        }
+    }
+
+    @Override
+    public Map<String, String> getAttributes() {
+        return attributes == null ? null : ImmutableMap.copyOf(attributes);
+    }
+
+    @Override
+    public boolean hasAttributes() {
+        return attributes != null && !attributes.isEmpty();
     }
 
     /**
@@ -533,7 +802,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
         @Override
         public String toString() {
-            return String.format("dependencies '%s'", path);
+            return "dependencies '" + path + "'";
         }
 
         public FileCollection getFiles() {
@@ -545,23 +814,23 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         }
 
         public void beforeResolve(Action<? super ResolvableDependencies> action) {
-            resolutionListenerBroadcast.add("beforeResolve", action);
+            dependencyResolutionListeners.add("beforeResolve", action);
         }
 
         public void beforeResolve(Closure action) {
-            resolutionListenerBroadcast.add(new ClosureBackedMethodInvocationDispatch("beforeResolve", action));
+            dependencyResolutionListeners.add(new ClosureBackedMethodInvocationDispatch("beforeResolve", action));
         }
 
         public void afterResolve(Action<? super ResolvableDependencies> action) {
-            resolutionListenerBroadcast.add("afterResolve", action);
+            dependencyResolutionListeners.add("afterResolve", action);
         }
 
         public void afterResolve(Closure action) {
-            resolutionListenerBroadcast.add(new ClosureBackedMethodInvocationDispatch("afterResolve", action));
+            dependencyResolutionListeners.add(new ClosureBackedMethodInvocationDispatch("afterResolve", action));
         }
 
         public ResolutionResult getResolutionResult() {
-            DefaultConfiguration.this.resolveNow();
+            DefaultConfiguration.this.resolveNow(InternalState.RESULTS_RESOLVED);
             return DefaultConfiguration.this.cachedResolverResults.getResolutionResult();
         }
     }

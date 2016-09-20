@@ -15,13 +15,11 @@
  */
 
 package org.gradle.api.publish.maven
-
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.test.fixtures.file.TestFile
-import org.gradle.test.fixtures.maven.M2Installation
 import org.spockframework.util.TextUtil
 import spock.lang.Issue
 
+import static org.gradle.util.TextUtil.normaliseFileSeparators
 /**
  * Tests for bugfixes to maven publishing scenarios
  */
@@ -68,10 +66,7 @@ class MavenPublishIssuesIntegTest extends AbstractIntegrationSpec {
     @Issue("GRADLE-2681")
     def "gradle ignores maven mirror configuration for uploading archives"() {
         given:
-        TestFile m2Home = temporaryFolder.createDir("m2_home");
-        M2Installation m2Installation = new M2Installation(m2Home)
-
-        m2Installation.globalSettingsFile << """
+        m2.globalSettingsFile << """
 <settings>
   <mirrors>
     <mirror>
@@ -104,7 +99,7 @@ publishing {
 }
    """
         when:
-        using m2Installation
+        using m2
 
         then:
         succeeds "publish"
@@ -206,11 +201,55 @@ subprojects {
         def mainPom = mavenRepo.module('org.gradle', 'root', '1.0').parsedPom
         def dependency = mainPom.scopes.runtime.expectDependency('org.gradle:pom-excludes:0.1')
         dependency.exclusions.size() == 3
-        dependency.exclusions[0].groupId == "org.opensource1"
-        dependency.exclusions[0].artifactId == "dep1"
-        dependency.exclusions[1].groupId == "org.opensource2"
-        dependency.exclusions[1].artifactId == "*"
-        dependency.exclusions[2].groupId == "*"
-        dependency.exclusions[2].artifactId == "dep2"
+        def sorted = dependency.exclusions.sort { it.groupId }
+        sorted[0].groupId == "*"
+        sorted[0].artifactId == "dep2"
+        sorted[1].groupId == "org.opensource1"
+        sorted[1].artifactId == "dep1"
+        sorted[2].groupId == "org.opensource2"
+        sorted[2].artifactId == "*"
+
+    }
+
+    @Issue("GRADLE-3318")
+    def "can reference rule-source tasks from sub-projects"() {
+        given:
+        using m2
+        def repo = file("maven").createDir()
+        settingsFile << """
+        include 'sub1'
+        include 'sub2'
+        """
+
+        [file("sub1/build.gradle"), file("sub2/build.gradle")].each { File f ->
+            f << """
+            apply plugin: "java"
+            apply plugin: "maven-publish"
+
+            publishing {
+                repositories{ maven{ url '${normaliseFileSeparators(repo.getAbsolutePath())}'}}
+                publications {
+                    maven(MavenPublication) {
+                        groupId 'org.gradle.sample'
+                        version '1.1'
+                        from components.java
+                    }
+                }
+            }"""
+        }
+
+        buildFile << """
+        apply plugin: "maven-publish"
+
+        task customPublish(dependsOn: subprojects.collect { Project p -> p.tasks.withType(PublishToMavenLocal)})"""
+        when:
+        succeeds('customPublish')
+
+        then:
+        output.contains(":sub1:generatePomFileForMavenPublication")
+        output.contains(":sub1:publishMavenPublicationToMavenLocal")
+        output.contains(":sub2:generatePomFileForMavenPublication")
+        output.contains(":sub2:publishMavenPublicationToMavenLocal")
+        output.contains(":customPublish")
     }
 }

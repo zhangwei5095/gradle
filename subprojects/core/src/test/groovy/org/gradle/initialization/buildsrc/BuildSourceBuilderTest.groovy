@@ -21,8 +21,12 @@ import org.gradle.cache.CacheRepository
 import org.gradle.cache.PersistentCache
 import org.gradle.initialization.GradleLauncher
 import org.gradle.initialization.GradleLauncherFactory
+import org.gradle.internal.classpath.CachedClasspathTransformer
 import org.gradle.internal.classpath.ClassPath
+import org.gradle.internal.progress.BuildOperationDetails
+import org.gradle.internal.progress.BuildOperationExecutor
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
+import org.gradle.internal.Factory
 import org.junit.Rule
 import spock.lang.Specification
 
@@ -30,16 +34,19 @@ class BuildSourceBuilderTest extends Specification {
 
     @Rule TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider()
 
-    GradleLauncherFactory launcherFactory = Mock()
-    ClassLoaderScope classLoaderScope = Mock()
-    CacheRepository cacheRepository = Mock()
-    BuildSourceBuilder buildSourceBuilder = Spy(BuildSourceBuilder, constructorArgs: [launcherFactory, classLoaderScope,  cacheRepository])
+    def launcherFactory = Mock(GradleLauncherFactory)
+    def classLoaderScope = Mock(ClassLoaderScope)
+    def cacheRepository = Mock(CacheRepository)
+    def executor = Mock(BuildOperationExecutor)
+    def transformer = Mock(CachedClasspathTransformer)
+    def buildSourceBuilder = Spy(BuildSourceBuilder, constructorArgs: [launcherFactory, classLoaderScope,  cacheRepository, executor, transformer])
 
-    StartParameter parameter = new StartParameter()
+    def parameter = new StartParameter()
 
     void "creates classpath when build src does not exist"() {
         when:
-        parameter.setCurrentDir(new File('nonexisting'));
+        parameter.setCurrentDir(new File('nonexisting'))
+
         then:
         buildSourceBuilder.createBuildSourceClasspath(parameter).asFiles == []
     }
@@ -48,7 +55,8 @@ class BuildSourceBuilderTest extends Specification {
         def cache = Mock(PersistentCache)
         def classpath = Mock(ClassPath)
         def launcher = Mock(GradleLauncher)
-        launcherFactory.newInstance(_) >> launcher
+        executor.run(_, _) >> { BuildOperationDetails details, Factory factory -> return factory.create() }
+        launcherFactory.nestedInstance(_) >> launcher
         buildSourceBuilder.createCache(parameter) >> cache
         cache.useCache(_ as String, _ as BuildSrcUpdateFactory) >> classpath
 

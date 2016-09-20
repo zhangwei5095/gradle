@@ -18,11 +18,12 @@ package org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult;
 
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ResolvedArtifact;
-import org.gradle.api.internal.artifacts.ResolvedConfigurationIdentifier;
+
+import java.util.Set;
 
 public interface ResolvedContentsMapping {
 
-    ResolvedArtifact getArtifact(long id);
+    Set<ResolvedArtifact> getArtifacts(long id);
 
-    ModuleDependency getModuleDependency(ResolvedConfigurationIdentifier id);
+    ModuleDependency getModuleDependency(long id);
 }

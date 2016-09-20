@@ -18,6 +18,7 @@
 
 package org.gradle.launcher.daemon
 
+import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
 import org.gradle.integtests.fixtures.executer.DaemonGradleExecuter
 import org.gradle.integtests.fixtures.executer.DefaultGradleDistribution
 import org.gradle.internal.os.OperatingSystem
@@ -36,7 +37,7 @@ class DaemonInitScriptHandlingIntegrationTest extends DaemonIntegrationSpec {
         distro.file("bin", OperatingSystem.current().getScriptName("gradle")).permissions = 'rwx------'
         distro.file("init.d/init.gradle") << """
             gradle.allprojects {
-                task echo << { println "from distro $i" }
+                task echo { doLast { println "from distro $i" } }
             }
         """
         distro

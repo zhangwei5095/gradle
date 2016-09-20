@@ -24,6 +24,7 @@ import org.gradle.integtests.tooling.fixture.TextUtil
 import org.gradle.integtests.tooling.fixture.ToolingApi
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.tooling.GradleConnector
+import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.model.GradleProject
 import org.gradle.util.GradleVersion
 import spock.lang.Issue
@@ -39,11 +40,6 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         projectDir = temporaryFolder.testDirectory
     }
 
-    def "ensure the previous version supports short-lived daemons"() {
-        expect:
-        otherVersion.daemonIdleTimeoutConfigurable
-    }
-
     def "tooling api uses to the current version of gradle when none has been specified"() {
         projectDir.file('build.gradle') << "assert gradle.gradleVersion == '${GradleVersion.current().version}'"
 
@@ -54,10 +50,24 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         model != null
     }
 
+    def "tooling api output reports 'CONFIGURE SUCCESSFUL' for model requests"() {
+        projectDir.file('build.gradle') << "assert gradle.gradleVersion == '${GradleVersion.current().version}'"
+
+        when:
+        def stdOut = new ByteArrayOutputStream()
+        toolingApi.withConnection { ProjectConnection connection ->
+            connection.model(GradleProject.class).setStandardOutput(stdOut).get()
+        }
+
+        then:
+        stdOut.toString().contains("CONFIGURE SUCCESSFUL")
+        !stdOut.toString().contains("BUILD SUCCESSFUL")
+    }
+
     def "tooling api uses the wrapper properties to determine which version to use"() {
         projectDir.file('build.gradle').text = """
 task wrapper(type: Wrapper) { distributionUrl = '${otherVersion.binDistribution.toURI()}' }
-task check << { assert gradle.gradleVersion == '${otherVersion.version.version}' }
+task check { doLast { assert gradle.gradleVersion == '${otherVersion.version.version}' } }
 """
         executer.withTasks('wrapper').run()
 
@@ -76,7 +86,7 @@ task check << { assert gradle.gradleVersion == '${otherVersion.version.version}'
         projectDir.file('build.gradle') << """
 task wrapper(type: Wrapper) { distributionUrl = '${otherVersion.binDistribution.toURI()}' }
 allprojects {
-    task check << { assert gradle.gradleVersion == '${otherVersion.version.version}' }
+    task check { doLast { assert gradle.gradleVersion == '${otherVersion.version.version}' } }
 }
 """
         projectDir.file('child').createDir()
@@ -167,19 +177,21 @@ allprojects {
                 systemProperty 'org.gradle.daemon.registry.base', "${TextUtil.escapeString(projectDir.file("daemon").absolutePath)}"
             }
 
-            task thing << {
-                def startMarkerFile = file("start.marker")
-                startMarkerFile << new Date().toString()
-                println "start marker written (\$startMarkerFile)"
+            task thing {
+                doLast {
+                    def startMarkerFile = file("start.marker")
+                    startMarkerFile << new Date().toString()
+                    println "start marker written (\$startMarkerFile)"
 
-                def stopMarkerFile = file("stop.marker")
-                def startedAt = System.currentTimeMillis()
-                println "waiting for stop marker (\$stopMarkerFile)"
-                while(!stopMarkerFile.exists()) {
-                    if (System.currentTimeMillis() - startedAt > $stateChangeTimeoutMs) {
-                        throw new Exception("Timeout ($stateChangeTimeoutMs ms) waiting for stop marker")
+                    def stopMarkerFile = file("stop.marker")
+                    def startedAt = System.currentTimeMillis()
+                    println "waiting for stop marker (\$stopMarkerFile)"
+                    while(!stopMarkerFile.exists()) {
+                        if (System.currentTimeMillis() - startedAt > $stateChangeTimeoutMs) {
+                            throw new Exception("Timeout ($stateChangeTimeoutMs ms) waiting for stop marker")
+                        }
+                        sleep $retryIntervalMs
                     }
-                    sleep $retryIntervalMs
                 }
             }
         """
@@ -214,10 +226,12 @@ allprojects {
                     try {
                         // Configure the build
                         BuildLauncher launcher = connection.newBuild();
-                        launcher.forTasks("thing").withArguments("-u");
+                        launcher.forTasks("thing");
+                        launcher.withArguments("-u");
                         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                         launcher.setStandardOutput(outputStream);
                         launcher.setStandardError(outputStream);
+                        launcher.setColorOutput(true);
 
                         // Run the build
                         launcher.run();
@@ -231,6 +245,7 @@ allprojects {
 
         when:
         GradleHandle handle = executer.inDirectory(projectDir)
+                .expectDeprecationWarning() // tapi on java 6
                 .withTasks('run')
                 .start()
 

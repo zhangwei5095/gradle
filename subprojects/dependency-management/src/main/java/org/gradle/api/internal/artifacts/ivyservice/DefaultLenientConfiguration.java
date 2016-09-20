@@ -15,60 +15,100 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice;
 
-import org.gradle.api.artifacts.*;
-import org.gradle.internal.resolve.ArtifactResolveException;
-import org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult.ResolvedConfigurationResults;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.LenientConfiguration;
+import org.gradle.api.artifacts.ModuleDependency;
+import org.gradle.api.artifacts.ResolveException;
+import org.gradle.api.artifacts.ResolvedArtifact;
+import org.gradle.api.artifacts.ResolvedDependency;
+import org.gradle.api.artifacts.UnresolvedDependency;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifacts;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult.TransientConfigurationResults;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
 import org.gradle.internal.Factory;
 import org.gradle.internal.graph.CachingDirectedGraphWalker;
 import org.gradle.internal.graph.DirectedGraphWithEdgeValues;
+import org.gradle.internal.resolve.ArtifactResolveException;
 import org.gradle.util.CollectionUtils;
 
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class DefaultLenientConfiguration implements LenientConfiguration {
     private CacheLockingManager cacheLockingManager;
     private final Configuration configuration;
-    private ResolvedConfigurationResults results;
+    private final Set<UnresolvedDependency> unresolvedDependencies;
+    private final ResolvedArtifacts artifactResults;
+    private final Factory<TransientConfigurationResults> transientConfigurationResultsFactory;
 
-    public DefaultLenientConfiguration(Configuration configuration, ResolvedConfigurationResults results, CacheLockingManager cacheLockingManager) {
+    public DefaultLenientConfiguration(Configuration configuration, CacheLockingManager cacheLockingManager, Set<UnresolvedDependency> unresolvedDependencies,
+                                       ResolvedArtifacts artifactResults, Factory<TransientConfigurationResults> transientConfigurationResultsLoader) {
         this.configuration = configuration;
-        this.results = results;
         this.cacheLockingManager = cacheLockingManager;
+        this.unresolvedDependencies = unresolvedDependencies;
+        this.artifactResults = artifactResults;
+        this.transientConfigurationResultsFactory = transientConfigurationResultsLoader;
     }
 
     public boolean hasError() {
-        return results.hasError();
+        return unresolvedDependencies.size() > 0;
+    }
+
+    public Set<UnresolvedDependency> getUnresolvedModuleDependencies() {
+        return unresolvedDependencies;
     }
 
     public void rethrowFailure() throws ResolveException {
         if (hasError()) {
             List<Throwable> failures = new ArrayList<Throwable>();
-            for (UnresolvedDependency unresolvedDependency : results.getUnresolvedDependencies()) {
+            for (UnresolvedDependency unresolvedDependency : unresolvedDependencies) {
                 failures.add(unresolvedDependency.getProblem());
             }
-            throw new ResolveException(configuration, failures);
+            throw new ResolveException(configuration.toString(), failures);
         }
     }
 
-    public Set<UnresolvedDependency> getUnresolvedModuleDependencies() {
-        return results.getUnresolvedDependencies();
+    public Set<ResolvedArtifact> getResolvedArtifacts() throws ResolveException {
+        return artifactResults.getArtifacts();
     }
 
-    public Set<ResolvedArtifact> getResolvedArtifacts() throws ResolveException {
-        return results.getArtifacts();
+    private TransientConfigurationResults loadTransientGraphResults() {
+        return transientConfigurationResultsFactory.create();
     }
 
     public Set<ResolvedDependency> getFirstLevelModuleDependencies(Spec<? super Dependency> dependencySpec) {
         Set<ResolvedDependency> matches = new LinkedHashSet<ResolvedDependency>();
-        for (Map.Entry<ModuleDependency, ResolvedDependency> entry : results.more().getFirstLevelDependencies().entrySet()) {
+        for (Map.Entry<ModuleDependency, ResolvedDependency> entry : loadTransientGraphResults().getFirstLevelDependencies().entrySet()) {
             if (dependencySpec.isSatisfiedBy(entry.getKey())) {
                 matches.add(entry.getValue());
             }
         }
         return matches;
+    }
+
+    public Set<ResolvedDependency> getAllModuleDependencies() {
+        Set<ResolvedDependency> resolvedElements = new LinkedHashSet<ResolvedDependency>();
+        Deque<ResolvedDependency> workQueue = new LinkedList<ResolvedDependency>();
+        workQueue.addAll(loadTransientGraphResults().getRoot().getChildren());
+        while (!workQueue.isEmpty()) {
+            ResolvedDependency item = workQueue.removeFirst();
+            if (resolvedElements.add(item)) {
+                final Set<ResolvedDependency> children = item.getChildren();
+                if (children != null) {
+                    workQueue.addAll(children);
+                }
+            }
+        }
+        return resolvedElements;
     }
 
     public Set<File> getFiles(Spec<? super Dependency> dependencySpec) {
@@ -128,7 +168,7 @@ public class DefaultLenientConfiguration implements LenientConfiguration {
         //this is not very nice might be good enough until we get rid of ResolvedConfiguration and friends
         //avoid traversing the graph causing the full ResolvedDependency graph to be loaded for the most typical scenario
         if (dependencySpec == Specs.SATISFIES_ALL) {
-            return results.getArtifacts();
+            return artifactResults.getArtifacts();
         }
 
         CachingDirectedGraphWalker<ResolvedDependency, ResolvedArtifact> walker
@@ -139,7 +179,7 @@ public class DefaultLenientConfiguration implements LenientConfiguration {
         Set<ResolvedArtifact> artifacts = new LinkedHashSet<ResolvedArtifact>();
 
         for (ResolvedDependency resolvedDependency : firstLevelModuleDependencies) {
-            artifacts.addAll(resolvedDependency.getParentArtifacts(results.more().getRoot()));
+            artifacts.addAll(resolvedDependency.getParentArtifacts(loadTransientGraphResults().getRoot()));
             walker.add(resolvedDependency);
         }
 
@@ -152,7 +192,7 @@ public class DefaultLenientConfiguration implements LenientConfiguration {
     }
 
     public Set<ResolvedDependency> getFirstLevelModuleDependencies() {
-        return results.more().getRoot().getChildren();
+        return loadTransientGraphResults().getRoot().getChildren();
     }
 
     private static class ResolvedDependencyArtifactsGraph implements DirectedGraphWithEdgeValues<ResolvedDependency, ResolvedArtifact> {

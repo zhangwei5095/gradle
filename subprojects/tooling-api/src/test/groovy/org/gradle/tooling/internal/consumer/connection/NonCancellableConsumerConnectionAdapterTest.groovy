@@ -17,8 +17,8 @@
 package org.gradle.tooling.internal.consumer.connection
 
 import org.gradle.initialization.DefaultBuildCancellationToken
-import org.gradle.logging.ConfigureLogging
-import org.gradle.logging.TestOutputEventListener
+import org.gradle.internal.logging.ConfigureLogging
+import org.gradle.internal.logging.TestOutputEventListener
 import org.gradle.tooling.BuildAction
 import org.gradle.tooling.internal.consumer.parameters.ConsumerOperationParameters
 import org.junit.Rule
@@ -53,7 +53,7 @@ class NonCancellableConsumerConnectionAdapterTest extends Specification {
 
         given:
         _ * target.run(action, parameters) >> {
-            cancellation.doCancel()
+            cancellation.cancel()
             'result'
         }
 
@@ -77,7 +77,7 @@ class NonCancellableConsumerConnectionAdapterTest extends Specification {
 
         when:
         def result = connection.run(action, parameters)
-        cancellation.doCancel()
+        cancellation.cancel()
 
         then:
         result == 'result'

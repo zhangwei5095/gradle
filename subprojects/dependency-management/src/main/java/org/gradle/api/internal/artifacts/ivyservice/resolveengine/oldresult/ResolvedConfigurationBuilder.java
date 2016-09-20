@@ -16,29 +16,21 @@
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.oldresult;
 
 import org.gradle.api.artifacts.ModuleDependency;
-import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.UnresolvedDependency;
-import org.gradle.api.internal.artifacts.ResolvedConfigurationIdentifier;
-import org.gradle.internal.component.model.ComponentResolveMetaData;
-import org.gradle.internal.resolve.resolver.ArtifactResolver;
-import org.gradle.internal.component.model.ComponentArtifactMetaData;
-
-import java.util.Set;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphNode;
 
 //builds old model of resolved dependency graph based on the result events
 public interface ResolvedConfigurationBuilder {
 
-    void addFirstLevelDependency(ModuleDependency moduleDependency, ResolvedConfigurationIdentifier dependency);
+    void addFirstLevelDependency(ModuleDependency moduleDependency, DependencyGraphNode dependency);
 
     void addUnresolvedDependency(UnresolvedDependency unresolvedDependency);
 
-    void addChild(ResolvedConfigurationIdentifier parent, ResolvedConfigurationIdentifier child);
+    void addChild(DependencyGraphNode parent, DependencyGraphNode child, long artifactsId);
 
-    void done(ResolvedConfigurationIdentifier root);
+    void newResolvedDependency(DependencyGraphNode node);
 
-    void addParentSpecificArtifacts(ResolvedConfigurationIdentifier child, ResolvedConfigurationIdentifier parent, Set<ResolvedArtifact> artifacts);
+    void done(DependencyGraphNode root);
 
-    void newResolvedDependency(ResolvedConfigurationIdentifier id);
-
-    ResolvedArtifact newArtifact(ResolvedConfigurationIdentifier owner, ComponentResolveMetaData component, ComponentArtifactMetaData artifact, ArtifactResolver artifactResolver);
+    ResolvedGraphResults complete();
 }

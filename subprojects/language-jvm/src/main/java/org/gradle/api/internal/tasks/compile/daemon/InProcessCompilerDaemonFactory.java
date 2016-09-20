@@ -16,10 +16,17 @@
 
 package org.gradle.api.internal.tasks.compile.daemon;
 
+import org.gradle.api.internal.classloading.GroovySystemLoader;
+import org.gradle.api.internal.classloading.GroovySystemLoaderFactory;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.Logger;
 import org.gradle.internal.UncheckedException;
-import org.gradle.internal.classloader.*;
+import org.gradle.internal.classloader.CachingClassLoader;
+import org.gradle.internal.classloader.ClassLoaderFactory;
+import org.gradle.internal.classloader.ClasspathUtil;
+import org.gradle.internal.classloader.FilteringClassLoader;
+import org.gradle.internal.classloader.MultiParentClassLoader;
+import org.gradle.internal.classloader.VisitableURLClassLoader;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.io.ClassLoaderObjectInputStream;
 import org.gradle.internal.nativeintegration.services.NativeServices;
@@ -35,29 +42,34 @@ import java.util.concurrent.Callable;
 public class InProcessCompilerDaemonFactory implements CompilerDaemonFactory {
     private final ClassLoaderFactory classLoaderFactory;
     private final File gradleUserHomeDir;
+    private final GroovySystemLoaderFactory groovySystemLoaderFactory = new GroovySystemLoaderFactory();
 
     public InProcessCompilerDaemonFactory(ClassLoaderFactory classLoaderFactory, File gradleUserHomeDir) {
         this.classLoaderFactory = classLoaderFactory;
         this.gradleUserHomeDir = gradleUserHomeDir;
     }
 
+    @Override
     public CompilerDaemon getDaemon(File workingDir, final DaemonForkOptions forkOptions) {
         return new CompilerDaemon() {
             public <T extends CompileSpec> CompileResult execute(Compiler<T> compiler, T spec) {
                 ClassLoader groovyClassLoader = classLoaderFactory.createIsolatedClassLoader(new DefaultClassPath(forkOptions.getClasspath()));
-                FilteringClassLoader filteredGroovy = classLoaderFactory.createFilteringClassLoader(groovyClassLoader);
+                GroovySystemLoader groovyLoader = groovySystemLoaderFactory.forClassLoader(groovyClassLoader);
+                FilteringClassLoader.Spec filteredGroovySpec = new FilteringClassLoader.Spec();
                 for (String packageName : forkOptions.getSharedPackages()) {
-                    filteredGroovy.allowPackage(packageName);
+                    filteredGroovySpec.allowPackage(packageName);
                 }
+                ClassLoader filteredGroovy = classLoaderFactory.createFilteringClassLoader(groovyClassLoader, filteredGroovySpec);
 
-                FilteringClassLoader loggingClassLoader = classLoaderFactory.createFilteringClassLoader(compiler.getClass().getClassLoader());
-                loggingClassLoader.allowPackage("org.slf4j");
-                loggingClassLoader.allowClass(Logger.class);
-                loggingClassLoader.allowClass(LogLevel.class);
+                FilteringClassLoader.Spec loggingSpec = new FilteringClassLoader.Spec();
+                loggingSpec.allowPackage("org.slf4j");
+                loggingSpec.allowClass(Logger.class);
+                loggingSpec.allowClass(LogLevel.class);
+                ClassLoader loggingClassLoader = classLoaderFactory.createFilteringClassLoader(compiler.getClass().getClassLoader(), loggingSpec);
 
                 ClassLoader groovyAndLoggingClassLoader = new CachingClassLoader(new MultiParentClassLoader(loggingClassLoader, filteredGroovy));
 
-                ClassLoader workerClassLoader = new MutableURLClassLoader(groovyAndLoggingClassLoader, ClasspathUtil.getClasspath(compiler.getClass().getClassLoader()));
+                ClassLoader workerClassLoader = new VisitableURLClassLoader(groovyAndLoggingClassLoader, ClasspathUtil.getClasspath(compiler.getClass().getClassLoader()));
 
                 try {
                     byte[] serializedWorker = GUtil.serialize(new Worker<T>(compiler, spec, gradleUserHomeDir));
@@ -69,6 +81,8 @@ public class InProcessCompilerDaemonFactory implements CompilerDaemonFactory {
                     return (CompileResult) inputStream.readObject();
                 } catch (Exception e) {
                     throw UncheckedException.throwAsUncheckedException(e);
+                } finally {
+                    groovyLoader.shutdown();
                 }
             }
         };
@@ -85,6 +99,7 @@ public class InProcessCompilerDaemonFactory implements CompilerDaemonFactory {
             this.gradleUserHome = gradleUserHome;
         }
 
+        @Override
         public Object call() throws Exception {
             // We have to initialize this here because we're in an isolated classloader
             NativeServices.initialize(gradleUserHome);

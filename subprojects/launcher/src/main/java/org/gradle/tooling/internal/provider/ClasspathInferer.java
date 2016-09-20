@@ -17,9 +17,12 @@
 package org.gradle.tooling.internal.provider;
 
 import com.google.common.collect.MapMaker;
+import com.google.common.io.ByteStreams;
 import net.jcip.annotations.ThreadSafe;
 import org.gradle.api.GradleException;
+import org.gradle.internal.classloader.ClassLoaderUtils;
 import org.gradle.internal.classloader.ClasspathUtil;
+import org.gradle.util.internal.Java9ClassReader;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;
 import org.slf4j.Logger;
@@ -27,8 +30,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.InputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
-import java.util.*;
+import java.net.URLConnection;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -63,7 +72,7 @@ public class ClasspathInferer {
      */
     private void find(Class<?> target, Collection<Class<?>> visited, Collection<URL> dest) {
         ClassLoader targetClassLoader = target.getClassLoader();
-        if (targetClassLoader == null) {
+        if (targetClassLoader == null || targetClassLoader == ClassLoaderUtils.getPlatformClassLoader()) {
             // A system class, skip it
             return;
         }
@@ -72,7 +81,7 @@ public class ClasspathInferer {
             return;
         }
 
-        String resourceName = target.getName().replace(".", "/") + ".class";
+        String resourceName = target.getName().replace('.', '/') + ".class";
         URL resource = targetClassLoader.getResource(resourceName);
         try {
             if (resource == null) {
@@ -86,9 +95,15 @@ public class ClasspathInferer {
             // To determine the dependencies of the class, load up the byte code and look for CONSTANT_Class entries in the constant pool
 
             ClassReader reader;
-            InputStream inputStream = resource.openStream();
+            URLConnection urlConnection = resource.openConnection();
+            if (urlConnection instanceof JarURLConnection) {
+                // Using the caches for these connections leaves the Jar files open. Don't use the cache, so that the Jar file is closed when the stream is closed below
+                // There are other options for solving this that may be more performant. However a class is inspected this way once and the result reused, so this approach is probably fine
+                urlConnection.setUseCaches(false);
+            }
+            InputStream inputStream = urlConnection.getInputStream();
             try {
-                reader = new ClassReader(inputStream);
+                reader = new Java9ClassReader(ByteStreams.toByteArray(inputStream));
             } finally {
                 inputStream.close();
             }

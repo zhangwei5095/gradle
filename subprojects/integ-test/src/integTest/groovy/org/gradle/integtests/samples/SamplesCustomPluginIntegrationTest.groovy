@@ -42,6 +42,7 @@ class SamplesCustomPluginIntegrationTest extends AbstractIntegrationSpec {
 
     public void canPublishAndUsePluginAndTestImplementations() {
         given:
+        using m2 //uploadArchives is leaking to ~/.m2 folder
         executer.inDirectory(producerDir).withTasks('uploadArchives').run()
 
         when:

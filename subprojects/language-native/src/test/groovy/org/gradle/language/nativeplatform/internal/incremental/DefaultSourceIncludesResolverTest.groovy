@@ -15,7 +15,8 @@
  */
 package org.gradle.language.nativeplatform.internal.incremental
 
-import org.gradle.language.nativeplatform.internal.SourceIncludes
+import org.gradle.language.nativeplatform.internal.IncludeDirectives
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.DefaultInclude
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
@@ -31,14 +32,14 @@ class DefaultSourceIncludesResolverTest extends Specification {
     def macroIncludes = []
     def includesParser = Mock(SourceIncludesParser)
     def includes
-    def includePaths = []
+    def includePaths = [ ]
 
     def setup() {
-        includes = Mock(SourceIncludes)
+        includes = Mock(IncludeDirectives)
         includesParser.parseIncludes(sourceFile) >> includes
-        includes.getQuotedIncludes() >> quotedIncludes
-        includes.getSystemIncludes() >> systemIncludes
-        includes.getMacroIncludes() >> macroIncludes
+        includes.getQuotedIncludes() >> { quotedIncludes.collect { include(it) } }
+        includes.getSystemIncludes() >> { systemIncludes.collect { include(it) } }
+        includes.getMacroIncludes() >> { macroIncludes.collect { include(it) } }
     }
 
     protected TestFile getSourceFile() {
@@ -46,21 +47,30 @@ class DefaultSourceIncludesResolverTest extends Specification {
     }
 
     def getDependencies() {
-        return new DefaultSourceIncludesResolver(includePaths).resolveIncludes(sourceFile, includes) as List
+        return new DefaultSourceIncludesResolver(includePaths).resolveIncludes(sourceFile, includes).getResolvedIncludes() as List
+    }
+
+    def getCandidates() {
+        return new DefaultSourceIncludesResolver(includePaths).resolveIncludes(sourceFile, includes).getCheckedLocations() as List
     }
 
     def "handles source file with no includes"() {
         expect:
         dependencies == []
+        noCandidates()
     }
 
     def "ignores include files that do not exist"() {
+        given:
+        def test = sourceDirectory.file("test.h")
+
         when:
         quotedIncludes << "test.h"
-        systemIncludes << "system"
+        systemIncludes << "system.h"
 
         then:
         dependencies == []
+        searchedCandidates() == [ test ]
     }
 
     def "locates quoted includes in same directory"() {
@@ -73,6 +83,7 @@ class DefaultSourceIncludesResolverTest extends Specification {
 
         then:
         dependencies == deps(header1, header2)
+        searchedCandidates() == [ header1, header2 ]
     }
 
     def "locates quoted includes relative to source directory"() {
@@ -86,6 +97,7 @@ class DefaultSourceIncludesResolverTest extends Specification {
 
         then:
         dependencies.collect {it.file} == [header1, header2, header3]
+        searchedCandidates() == [ header1, header2, header3 ]
     }
 
     def "does not locate system includes in same directory"() {
@@ -97,24 +109,30 @@ class DefaultSourceIncludesResolverTest extends Specification {
 
         then:
         dependencies == []
+        noCandidates()
     }
 
     def "locates includes in path"() {
         when:
         def includeDir1 = testDirectory.file("include1")
-        final header11 = includeDir1.file("test11.h").createFile()
-        final header12 = includeDir1.file("test12.h").createFile()
+        final projectHeader1 = includeDir1.file("projectHeader1.h").createFile()
+        final headerWithSystemName1 = includeDir1.file("headerWithSystemName1.h").createFile()
         def includeDir2 = testDirectory.file("include2")
-        final header21 = includeDir1.file("test21.h").createFile()
-        final header22 = includeDir1.file("test22.h").createFile()
+        final projectHeader2 = includeDir2.file("projectHeader2.h").createFile()
+        final headerWithSystemName2 = includeDir2.file("headerWithSystemName2.h").createFile()
 
         and:
         includePaths << includeDir1 << includeDir2
-        quotedIncludes << "test11.h" << "test21.h"
-        systemIncludes << "test12.h" << "test22.h"
+        quotedIncludes << "projectHeader1.h" << "projectHeader2.h"
+        systemIncludes << "headerWithSystemName1.h" << "headerWithSystemName2.h"
 
         then:
-        dependencies == deps(header11, header21, header12, header22)
+        dependencies == deps(projectHeader1, projectHeader2, headerWithSystemName1, headerWithSystemName2)
+        searchedCandidates() == [ sourceDirectory.file("projectHeader1.h"), projectHeader1,
+                                  sourceDirectory.file("projectHeader2.h"), includeDir1.file("projectHeader2.h"), projectHeader2,
+                                  includeDir1.file("headerWithSystemName1.h"),
+                                  includeDir1.file("headerWithSystemName2.h"), includeDir2.file("headerWithSystemName2.h")
+        ]
     }
 
     def "searches relative before searching include path"() {
@@ -130,6 +148,8 @@ class DefaultSourceIncludesResolverTest extends Specification {
 
         then:
         dependencies == deps(relativeHeader, otherHeader)
+        searchedCandidates() == [ relativeHeader,
+                                  sourceDirectory.file("other.h"), otherHeader ]
     }
 
     def "includes unknown source dependency for first macro include"() {
@@ -141,8 +161,13 @@ class DefaultSourceIncludesResolverTest extends Specification {
         with (dependencies[0]) {
             unknown
             include == 'DEFINE_1'
+            maybeMacro
             file == null
         }
+    }
+
+    def include(String value) {
+        return DefaultInclude.parse(value, false)
     }
 
     def deps(File... files) {
@@ -151,5 +176,12 @@ class DefaultSourceIncludesResolverTest extends Specification {
 
     def dep(File dependencyFile) {
         return new ResolvedInclude(dependencyFile.name, dependencyFile)
+    }
+
+    void noCandidates() {
+        assert searchedCandidates() == []
+    }
+    def searchedCandidates() {
+        candidates.collect { it.canonicalFile } as List
     }
 }

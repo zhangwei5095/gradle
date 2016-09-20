@@ -13,18 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
-
 package org.gradle.integtests.tooling.r10rc1
 
-import org.gradle.integtests.tooling.fixture.TargetGradleVersion
 import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.exceptions.UnsupportedBuildArgumentException
 import org.gradle.tooling.model.GradleProject
 
-@TargetGradleVersion(">=1.0")
 class PassingCommandLineArgumentsCrossVersionSpec extends ToolingApiSpecification {
 
 //    We don't want to validate *all* command line options here, just enough to make sure passing through works.
@@ -48,8 +43,10 @@ class PassingCommandLineArgumentsCrossVersionSpec extends ToolingApiSpecificatio
     def "understands system properties"() {
         given:
         file("build.gradle") << """
-        task printProperty << {
-            file('sysProperty.txt') << System.getProperty('sysProperty')
+        task printProperty {
+            doLast {
+                file('sysProperty.txt') << System.getProperty('sysProperty')
+            }
         }
 """
 
@@ -120,7 +117,7 @@ class PassingCommandLineArgumentsCrossVersionSpec extends ToolingApiSpecificatio
         file('build.gradle') << "assert projectDir.name.endsWith('otherDir')"
 
         when:
-        withConnection { 
+        withConnection {
             it.newBuild().withArguments('-p', 'otherDir').run()
         }
 
@@ -158,8 +155,8 @@ class PassingCommandLineArgumentsCrossVersionSpec extends ToolingApiSpecificatio
     def "can overwrite task names via build arguments"() {
         given:
         file('build.gradle') << """
-task foo << { assert false }
-task bar << { assert true }
+task foo { doLast { assert false } }
+task bar { doLast { assert true } }
 """
 
         when:

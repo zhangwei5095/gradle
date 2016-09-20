@@ -89,11 +89,17 @@ import org.gradle.api.*
 public class CustomPlugin implements Plugin<Project> {
     public void apply(Project p) {
         Project.class.classLoader.loadClass('${implClassName}')
+        def cl
         try {
-            getClass().classLoader.loadClass('${implClassName}')
+            cl = getClass().classLoader
+            cl.loadClass('${implClassName}')
             assert false: 'should fail'
         } catch (ClassNotFoundException e) {
             // expected
+        } finally {
+            if (cl instanceof URLClassLoader) {
+                cl.close()
+            }
         }
         assert Thread.currentThread().contextClassLoader == getClass().classLoader
         p.task('test')

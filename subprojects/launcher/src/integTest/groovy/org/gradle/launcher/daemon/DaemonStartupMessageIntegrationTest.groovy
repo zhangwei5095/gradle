@@ -16,25 +16,22 @@
 
 package org.gradle.launcher.daemon
 
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import org.gradle.launcher.daemon.client.DefaultDaemonConnector
-import spock.lang.IgnoreIf
+import org.gradle.integtests.fixtures.daemon.DaemonIntegrationSpec
+import org.gradle.launcher.daemon.client.DaemonStartupMessage
 
-import static org.gradle.launcher.daemon.client.DefaultDaemonConnector.DISABLE_STARTING_DAEMON_MESSAGE_PROPERTY
-
-@IgnoreIf({ !GradleContextualExecuter.daemon })
-class DaemonStartupMessageIntegrationTest extends IsolatedDaemonSpec {
-
-    def setup() {
-        executer.withDaemonStartingMessageEnabled()
-    }
-
+class DaemonStartupMessageIntegrationTest extends DaemonIntegrationSpec {
     def "a message is logged when a new daemon is started"() {
         when:
         succeeds()
 
         then:
-        output.contains DefaultDaemonConnector.STARTING_DAEMON_MESSAGE
+        output.contains(DaemonStartupMessage.STARTING_DAEMON_MESSAGE)
+
+        when:
+        succeeds()
+
+        then:
+        !output.contains(DaemonStartupMessage.STARTING_DAEMON_MESSAGE)
     }
 
     def "the message is not shown when quiet log level is requested"() {
@@ -45,17 +42,6 @@ class DaemonStartupMessageIntegrationTest extends IsolatedDaemonSpec {
         succeeds()
 
         then:
-        !output.contains(DefaultDaemonConnector.STARTING_DAEMON_MESSAGE)
-    }
-
-    def "daemon starting message can be disabled"() {
-        given:
-        executer.withGradleOpts("-D${DISABLE_STARTING_DAEMON_MESSAGE_PROPERTY}=true")
-
-        when:
-        succeeds()
-
-        then:
-        !output.contains(DefaultDaemonConnector.STARTING_DAEMON_MESSAGE)
+        !output.contains(DaemonStartupMessage.STARTING_DAEMON_MESSAGE)
     }
 }

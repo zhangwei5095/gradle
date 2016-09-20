@@ -17,14 +17,25 @@
 package org.gradle.api.internal.artifacts.ivyservice.resolutionstrategy;
 
 import org.gradle.api.Action;
-import org.gradle.api.artifacts.*;
+import org.gradle.api.artifacts.ComponentSelection;
+import org.gradle.api.artifacts.ComponentSelectionRules;
+import org.gradle.api.artifacts.DependencyResolveDetails;
+import org.gradle.api.artifacts.DependencySubstitution;
+import org.gradle.api.artifacts.DependencySubstitutions;
+import org.gradle.api.artifacts.ModuleVersionSelector;
+import org.gradle.api.artifacts.ResolutionStrategy;
 import org.gradle.api.artifacts.cache.ResolutionRules;
-import org.gradle.api.artifacts.component.ComponentSelector;
 import org.gradle.api.internal.artifacts.ComponentSelectionRulesInternal;
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.configurations.ConflictResolution;
 import org.gradle.api.internal.artifacts.configurations.MutationValidator;
 import org.gradle.api.internal.artifacts.configurations.ResolutionStrategyInternal;
 import org.gradle.api.internal.artifacts.dsl.ModuleVersionSelectorParsers;
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DefaultDependencySubstitutions;
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRules;
+import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionsInternal;
 import org.gradle.internal.Actions;
+import org.gradle.internal.rules.SpecRuleAction;
 import org.gradle.internal.typeconversion.NormalizedTimeUnit;
 import org.gradle.internal.typeconversion.TimeUnitsParser;
 
@@ -44,23 +55,31 @@ public class DefaultResolutionStrategy implements ResolutionStrategyInternal {
 
     private final DefaultCachePolicy cachePolicy;
     private final DependencySubstitutionsInternal dependencySubstitutions;
+    private final DependencySubstitutionRules globalDependencySubstitutionRules;
     private MutationValidator mutationValidator = MutationValidator.IGNORE;
 
-    public DefaultResolutionStrategy() {
-        this(new DefaultCachePolicy(), new DefaultDependencySubstitutions());
+    private boolean assumeFluidDependencies;
+    private static final String ASSUME_FLUID_DEPENDENCIES = "org.gradle.resolution.assumeFluidDependencies";
+
+    public DefaultResolutionStrategy(DependencySubstitutionRules globalDependencySubstitutionRules, ComponentIdentifierFactory componentIdentifierFactory) {
+        this(new DefaultCachePolicy(), DefaultDependencySubstitutions.forResolutionStrategy(componentIdentifierFactory), globalDependencySubstitutionRules);
     }
 
-    DefaultResolutionStrategy(DefaultCachePolicy cachePolicy, DependencySubstitutionsInternal dependencySubstitutions) {
+    DefaultResolutionStrategy(DefaultCachePolicy cachePolicy, DependencySubstitutionsInternal dependencySubstitutions, DependencySubstitutionRules globalDependencySubstitutionRules) {
         this.cachePolicy = cachePolicy;
         this.dependencySubstitutions = dependencySubstitutions;
+        this.globalDependencySubstitutionRules = globalDependencySubstitutionRules;
+
+        // This is only used for testing purposes so we can test handling of fluid dependencies without adding dependency substituion rule
+        assumeFluidDependencies = Boolean.getBoolean(ASSUME_FLUID_DEPENDENCIES);
     }
 
     @Override
-    public void beforeChange(MutationValidator validator) {
+    public void setMutationValidator(MutationValidator validator) {
         mutationValidator = validator;
-        cachePolicy.beforeChange(validator);
-        componentSelectionRules.beforeChange(validator);
-        dependencySubstitutions.beforeChange(validator);
+        cachePolicy.setMutationValidator(validator);
+        componentSelectionRules.setMutationValidator(validator);
+        dependencySubstitutions.setMutationValidator(validator);
     }
 
     public Set<ModuleVersionSelector> getForcedModules() {
@@ -94,10 +113,22 @@ public class DefaultResolutionStrategy implements ResolutionStrategyInternal {
         return this;
     }
 
-    public Action<DependencySubstitution<ComponentSelector>> getDependencySubstitutionRule() {
-        Collection<Action<DependencySubstitution<ComponentSelector>>> allRules = flattenElements(new ModuleForcingResolveRule(forcedModules), dependencySubstitutions.getDependencySubstitutionRule());
+    public Action<DependencySubstitution> getDependencySubstitutionRule() {
+        Collection<Action<DependencySubstitution>> allRules = flattenElements(
+                new ModuleForcingResolveRule(forcedModules),
+                dependencySubstitutions.getRuleAction(),
+                globalDependencySubstitutionRules.getRuleAction());
         return Actions.composite(allRules);
     }
+
+    public void assumeFluidDependencies() {
+        assumeFluidDependencies = true;
+    }
+
+    public boolean resolveGraphToDetermineTaskDependencies() {
+        return assumeFluidDependencies || dependencySubstitutions.hasRules() || globalDependencySubstitutionRules.hasRules();
+    }
+
 
     public DefaultResolutionStrategy setForcedModules(Object ... moduleVersionSelectorNotations) {
         mutationValidator.validateMutation(STRATEGY);
@@ -148,13 +179,15 @@ public class DefaultResolutionStrategy implements ResolutionStrategyInternal {
     }
 
     public DefaultResolutionStrategy copy() {
-        DefaultResolutionStrategy out = new DefaultResolutionStrategy(cachePolicy.copy(), dependencySubstitutions.copy());
+        DefaultResolutionStrategy out = new DefaultResolutionStrategy(cachePolicy.copy(), dependencySubstitutions.copy(), globalDependencySubstitutionRules);
 
         if (conflictResolution instanceof StrictConflictResolution) {
             out.failOnVersionConflict();
         }
         out.setForcedModules(getForcedModules());
-        out.getComponentSelection().getRules().addAll(componentSelectionRules.getRules());
+        for (SpecRuleAction<? super ComponentSelection> ruleAction : componentSelectionRules.getRules()) {
+            out.getComponentSelection().addRule(ruleAction);
+        }
         return out;
     }
 }

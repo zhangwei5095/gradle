@@ -17,8 +17,11 @@
 package org.gradle.integtests.resolve
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
+import org.junit.runner.RunWith
 import spock.lang.Issue
 
+@RunWith(FluidDependenciesResolveRunner)
 class DetachedConfigurationsIntegrationTest extends AbstractIntegrationSpec {
 
     @Issue("GRADLE-2889")
@@ -35,12 +38,14 @@ class DetachedConfigurationsIntegrationTest extends AbstractIntegrationSpec {
                 repositories {
                     maven { url "${mavenRepo.uri}" }
                 }
-                task checkDependencies() << {
-                    configurations.each { conf ->
-                        def declared = conf.dependencies
-                        def detached = project.configurations.detachedConfiguration(declared as Dependency[])
-                        def resolved = detached.resolvedConfiguration.getFirstLevelModuleDependencies()
-                        assert declared*.name == resolved*.moduleName
+                task checkDependencies {
+                    doLast {
+                        configurations.each { conf ->
+                            def declared = conf.dependencies
+                            def detached = project.configurations.detachedConfiguration(declared as Dependency[])
+                            def resolved = detached.resolvedConfiguration.getFirstLevelModuleDependencies()
+                            assert declared*.name == resolved*.moduleName
+                        }
                     }
                 }
             }

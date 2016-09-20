@@ -23,7 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Provides a way to decode structured data from a backing byte stream.
+ * Provides a way to decode structured data from a backing byte stream. Implementations may buffer incoming bytes read
+ * from the backing stream prior to decoding.
  */
 public interface Decoder {
     /**
@@ -39,7 +40,7 @@ public interface Decoder {
     long readLong() throws EOFException, IOException;
 
     /**
-     * Reads a signed 64 bit int value. Can read any value that was written using {@link Encoder#writeSmallLong(int)}.
+     * Reads a signed 64 bit int value. Can read any value that was written using {@link Encoder#writeSmallLong(long)}.
      *
      * @throws EOFException when the end of the byte stream is reached before the int value can be fully read.
      */

@@ -16,6 +16,7 @@
 package org.gradle.integtests.resolve
 
 import org.gradle.integtests.fixtures.CrossVersionIntegrationSpec
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.test.fixtures.ivy.IvyFileRepository
 import org.gradle.test.fixtures.server.http.HttpServer
 import org.gradle.test.fixtures.server.http.IvyHttpRepository
@@ -23,6 +24,7 @@ import org.gradle.test.fixtures.server.http.MavenHttpRepository
 import org.junit.Rule
 import spock.lang.Issue
 
+@LeaksFileHandles
 class ResolveCrossVersionIntegrationTest extends CrossVersionIntegrationSpec {
     @Rule
     HttpServer server = new HttpServer()
@@ -62,8 +64,10 @@ dependencies {
     compile 'test:lang:2.+'
 }
 
-task check << {
-    assert configurations.compile*.name as Set == ['io-1.4.jar', 'lang-2.6.jar'] as Set
+task check {
+    doLast {
+        assert configurations.compile*.name as Set == ['io-1.4.jar', 'lang-2.6.jar'] as Set
+    }
 }
 """
 
@@ -118,8 +122,10 @@ dependencies {
     compile 'test:io:1.4'
 }
 
-task check << {
-    assert configurations.compile*.name as Set == ['io-1.4.jar'] as Set
+task check {
+    doLast {
+        assert configurations.compile*.name as Set == ['io-1.4.jar'] as Set
+    }
 }
 """
 

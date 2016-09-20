@@ -16,12 +16,14 @@
 package org.gradle.plugins.ide.internal;
 
 import com.google.common.collect.LinkedHashMultimap;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.artifacts.query.ArtifactResolutionQuery;
 import org.gradle.api.artifacts.result.ArtifactResult;
@@ -29,6 +31,7 @@ import org.gradle.api.artifacts.result.ComponentArtifactsResult;
 import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.component.Artifact;
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier;
+import org.gradle.jvm.JvmLibrary;
 import org.gradle.language.base.artifact.SourcesArtifact;
 import org.gradle.language.java.artifact.JavadocArtifact;
 import org.gradle.plugins.ide.internal.resolver.DefaultIdeDependencyResolver;
@@ -37,27 +40,31 @@ import org.gradle.plugins.ide.internal.resolver.model.IdeExtendedRepoFileDepende
 import org.gradle.plugins.ide.internal.resolver.model.IdeLocalFileDependency;
 import org.gradle.plugins.ide.internal.resolver.model.IdeProjectDependency;
 import org.gradle.plugins.ide.internal.resolver.model.UnresolvedIdeRepoFileDependency;
-import org.gradle.jvm.JvmLibrary;
 
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class IdeDependenciesExtractor {
 
     private final IdeDependencyResolver ideDependencyResolver = new DefaultIdeDependencyResolver();
 
     public Collection<IdeProjectDependency> extractProjectDependencies(Project project, Collection<Configuration> plusConfigurations, Collection<Configuration> minusConfigurations) {
-        LinkedHashMap<Project, IdeProjectDependency> deps = new LinkedHashMap<Project, IdeProjectDependency>();
+        Map<ProjectComponentIdentifier, IdeProjectDependency> deps = Maps.newLinkedHashMap();
 
         for (Configuration plusConfiguration : plusConfigurations) {
             for (IdeProjectDependency dep : ideDependencyResolver.getIdeProjectDependencies(plusConfiguration, project)) {
-                deps.put(dep.getProject(), dep);
+                deps.put(dep.getProjectId(), dep);
             }
         }
 
         for (Configuration minusConfiguration : minusConfigurations) {
             for (IdeProjectDependency dep : ideDependencyResolver.getIdeProjectDependencies(minusConfiguration, project)) {
-                deps.remove(dep.getProject());
+                deps.remove(dep.getProjectId());
             }
         }
 
@@ -88,6 +95,7 @@ public class IdeDependenciesExtractor {
         Collection<IdeExtendedRepoFileDependency> resolvedAndUnresolved = new ArrayList<IdeExtendedRepoFileDependency>(unresolvedDependencies.size() + resolvedDependencies.size());
         resolvedAndUnresolved.addAll(resolvedDependencies);
         resolvedAndUnresolved.addAll(unresolvedDependencies);
+
         return resolvedAndUnresolved;
     }
 
@@ -103,8 +111,8 @@ public class IdeDependenciesExtractor {
         ArtifactResolutionQuery query = dependencyHandler.createArtifactResolutionQuery();
         query.forComponents(dependencies.keySet());
 
-        @SuppressWarnings("unchecked") Class<? extends Artifact>[] artifactTypesArray = (Class<? extends Artifact>[]) new Class<?>[artifactTypes.size()];
-        query.withArtifacts(JvmLibrary.class, artifactTypes.toArray(artifactTypesArray));
+        @SuppressWarnings("unchecked") Class<? extends Artifact>[] artifactTypesArray = (Class<? extends Artifact>[]) artifactTypes.toArray(new Class<?>[0]);
+        query.withArtifacts(JvmLibrary.class, artifactTypesArray);
         Set<ComponentArtifactsResult> componentResults = query.execute().getResolvedComponents();
         for (ComponentArtifactsResult componentResult : componentResults) {
             for (IdeExtendedRepoFileDependency dependency : dependencies.get(componentResult.getId())) {
@@ -123,7 +131,7 @@ public class IdeDependenciesExtractor {
         }
     }
 
-    private Collection<UnresolvedIdeRepoFileDependency> unresolvedExternalDependencies(Collection<Configuration> plusConfigurations, Collection<Configuration> minusConfigurations) {
+    public Collection<UnresolvedIdeRepoFileDependency> unresolvedExternalDependencies(Iterable<Configuration> plusConfigurations, Iterable<Configuration> minusConfigurations) {
         final LinkedHashMap<File, UnresolvedIdeRepoFileDependency> unresolved = new LinkedHashMap<File, UnresolvedIdeRepoFileDependency>();
 
         for (Configuration c : plusConfigurations) {

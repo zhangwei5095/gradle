@@ -16,54 +16,66 @@
 package org.gradle.api.internal.artifacts.repositories;
 
 import org.gradle.api.Action;
+import org.gradle.api.Nullable;
+import org.gradle.api.artifacts.repositories.AuthenticationContainer;
 import org.gradle.api.artifacts.repositories.PasswordCredentials;
-import org.gradle.api.credentials.AwsCredentials;
 import org.gradle.api.credentials.Credentials;
-import org.gradle.internal.Transformers;
+import org.gradle.authentication.Authentication;
 import org.gradle.internal.artifacts.repositories.AuthenticationSupportedInternal;
-import org.gradle.internal.credentials.DefaultAwsCredentials;
 import org.gradle.internal.reflect.Instantiator;
 
-public abstract class AbstractAuthenticationSupportedRepository extends AbstractArtifactRepository implements AuthenticationSupportedInternal {
-    private Credentials credentials;
-    private final Instantiator instantiator;
+import java.util.Collection;
 
-    AbstractAuthenticationSupportedRepository(Instantiator instantiator) {
-        this.instantiator = instantiator;
+public abstract class AbstractAuthenticationSupportedRepository extends AbstractArtifactRepository implements AuthenticationSupportedInternal {
+    private final AuthenticationSupporter delegate;
+
+    AbstractAuthenticationSupportedRepository(Instantiator instantiator, AuthenticationContainer authenticationContainer) {
+        this.delegate = new AuthenticationSupporter(instantiator, authenticationContainer);
     }
 
     @Override
     public PasswordCredentials getCredentials() {
-        return getCredentials(PasswordCredentials.class);
+        return delegate.getCredentials();
     }
 
     @Override
-    public <T extends Credentials> T getCredentials(Class<T> clazz) {
-        if (credentials == null) {
-            credentials = newCredentials(clazz);
-        }
-        return Transformers.cast(clazz).transform(credentials);
+    public <T extends Credentials> T getCredentials(Class<T> credentialsType) {
+        return delegate.getCredentials(credentialsType);
     }
 
-    public void credentials(Action<? super PasswordCredentials> action) {
-        credentials(PasswordCredentials.class, action);
-    }
-
-    public <T extends Credentials> void credentials(Class<T> clazz, Action<? super T> action) throws IllegalStateException {
-        action.execute(getCredentials(clazz));
-    }
-
-    private <T extends Credentials> T newCredentials(Class<T> clazz) {
-        if (clazz == AwsCredentials.class) {
-            return Transformers.cast(clazz).transform(instantiator.newInstance(DefaultAwsCredentials.class));
-        } else if (clazz == PasswordCredentials.class) {
-            return Transformers.cast(clazz).transform(instantiator.newInstance(DefaultPasswordCredentials.class));
-        } else {
-            throw new IllegalArgumentException(String.format("Unknown credentials type: '%s'.", clazz.getName()));
-        }
-    }
-
+    @Nullable
+    @Override
     public Credentials getConfiguredCredentials() {
-        return credentials;
+        return delegate.getConfiguredCredentials();
+    }
+
+    @Override
+    public void setConfiguredCredentials(Credentials credentials) {
+        delegate.setConfiguredCredentials(credentials);
+    }
+
+    @Override
+    public void credentials(Action<? super PasswordCredentials> action) {
+        delegate.credentials(action);
+    }
+
+    @Override
+    public <T extends Credentials> void credentials(Class<T> credentialsType, Action<? super T> action) throws IllegalStateException {
+        delegate.credentials(credentialsType, action);
+    }
+
+    @Override
+    public void authentication(Action<? super AuthenticationContainer> action) {
+        delegate.authentication(action);
+    }
+
+    @Override
+    public AuthenticationContainer getAuthentication() {
+        return delegate.getAuthentication();
+    }
+
+    @Override
+    public Collection<Authentication> getConfiguredAuthentication() {
+        return delegate.getConfiguredAuthentication();
     }
 }

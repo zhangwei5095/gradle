@@ -19,8 +19,11 @@
 package org.gradle.integtests.resolve
 
 import org.gradle.integtests.fixtures.AbstractDependencyResolutionTest
+import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
+import org.junit.runner.RunWith
 import spock.lang.Issue
 
+@RunWith(FluidDependenciesResolveRunner)
 class ProjectDependenciesIntegrationTest extends AbstractDependencyResolutionTest {
 
     @Issue("GRADLE-2477") //this is a feature on its own but also covers one of the reported issues
@@ -57,14 +60,20 @@ class ProjectDependenciesIntegrationTest extends AbstractDependencyResolutionTes
         settingsFile << "include 'impl'"
         buildFile << """
             allprojects { configurations.create('conf') }
-            task extraKey << {
-                dependencies.project(path: ":impl", configuration: ":conf", foo: "bar")
+            task extraKey {
+                doLast {
+                    dependencies.project(path: ":impl", configuration: ":conf", foo: "bar")
+                }
             }
-            task missingPath << {
-                dependencies.project(paths: ":impl", configuration: ":conf")
+            task missingPath {
+                doLast {
+                    dependencies.project(paths: ":impl", configuration: ":conf")
+                }
             }
-            task missingConfiguration << {
-                dependencies.project(path: ":impl")
+            task missingConfiguration {
+                doLast {
+                    dependencies.project(path: ":impl")
+                }
             }
         """
 
@@ -72,7 +81,7 @@ class ProjectDependenciesIntegrationTest extends AbstractDependencyResolutionTes
         runAndFail("extraKey")
 
         then:
-        failureHasCause("No such property: foo for class: ")
+        failureHasCause("Could not set unknown property 'foo' for ")
 
         when:
         run("missingConfiguration")
